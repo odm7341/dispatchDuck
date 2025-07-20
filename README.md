@@ -46,7 +46,7 @@ If you wish to use a proxy server, create a separate profile:
 
 ---
 
-## ✨ How can play DASHDRM streams?
+## ✨ How can I play DASHDRM streams?
 
 Easy! You'll need the clearkeys in order to play DRM protected content. There are a number of ways to acquire the keys such as scripts and browser plugins.
 This script assumes that you have these keys already.
