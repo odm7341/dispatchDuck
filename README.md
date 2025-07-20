@@ -1,6 +1,8 @@
-# Dispatchwrapparr - An all-purpose wrapper for Dispatcharr
-<img width="250" height="250" alt="dispatchwrapparr" src="https://github.com/user-attachments/assets/eb65168b-e24f-4e0c-b17b-7d72021d1d15" />
+# Dispatchwrapparr - Super wrapper for Dispatcharr
 
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/eb65168b-e24f-4e0c-b17b-7d72021d1d15" height="200" alt="Dispatchwrapparr Logo" />
+</p>
 ---
 
 ## ❤️ What does dispatchwrapparr do?
