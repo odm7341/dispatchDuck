@@ -5,7 +5,7 @@
 </p>
 
 
-## ❤️ What does dispatchwrapparr do?
+## 🤝 What does dispatchwrapparr do?
 
 ✅ **Builtin DASHDRM Support** — Append `#clearkey=<clearkey>` to the end of the URL for clearkey/DRM decryption of livestreams\
 ✅ **High Performance** — Uses streamlink API's to offload segment downloading before passing to ffmpeg for muxing\
@@ -20,7 +20,7 @@
 - `-us`: Required user agent string
 - `-proxy <proxy server>`: Optional proxy server. Supports http, https, socks4a and socks5h.
 
-```dispatchwrapparr.py -i <url> -ua <user-agent> [-proxy <proxy server]```
+Example: `dispatchwrapparr.py -i <url> -ua <user-agent> [-proxy <proxy server]`
 
 ---
 
@@ -30,11 +30,11 @@ Dispatchwrapparr is designed to work within the Dispatcharr docker container. Ei
 
 1. Create a directory inside your Dispatcharr /data bind mount/volume map called 'dispatchwrapparr'.
 2. Download the python script dispatchwrapparr.py and copy it into the dispatchwrapper directory
-3. Make the script executable: ```chmod +x /path/to/dispatcharr/data/dispatchwrapparr/dispatchwrapparr.py```
+3. Make the script executable: `chmod +x /path/to/dispatcharr/data/dispatchwrapparr/dispatchwrapparr.py`
 4. Create a new profile in Dispatcharr under 'Settings' --> 'Stream Profiles'
 5. In the 'Name' field, type in 'dispatchwrapparr'
-6. In the 'Command' field, type in the location of the script as it would be inside the docker container, eg. ```/data/dispatchwrapparr/dispatchwrapparr.py```
-7. In the 'Parameters' field, type in ```-i {streamUrl} -ua {userAgent}```
+6. In the 'Command' field, type in the location of the script as it would be inside the docker container, eg. `/data/dispatchwrapparr/dispatchwrapparr.py`
+7. In the 'Parameters' field, type in `-i {streamUrl} -ua {userAgent}`
 8. Now select 'dispatchwrapparr' as your preferred profile on any particular streams!
 
 <img width="324" height="254" alt="image" src="https://github.com/user-attachments/assets/cee7ee08-102a-4b3b-9206-46a842e0b473" />
@@ -42,8 +42,8 @@ Dispatchwrapparr is designed to work within the Dispatcharr docker container. Ei
 If you wish to use a proxy server, create a separate profile:
 
 1. In the 'Name' field, type in 'dispatchwrapparr proxy'
-2. In the 'Command' field, type in the location of the script as it would be inside the docker container, eg. ```/data/dispatchwrapparr/dispatchwrapparr.py```
-3. In the 'Parameters' field, type in ```-i {streamUrl} -ua {userAgent} -proxy http://your.proxy.server:3128```
+2. In the 'Command' field, type in the location of the script as it would be inside the docker container, eg. `/data/dispatchwrapparr/dispatchwrapparr.py`
+3. In the 'Parameters' field, type in `-i {streamUrl} -ua {userAgent} -proxy http://your.proxy.server:3128`
 4. Now select 'dispatchwrapparr proxy' on any streams that you wish to use the proxy server for.
 
 ---
@@ -63,6 +63,14 @@ https://olsp.live.dash.c4assets.com/dash_iso_sp_tl/live/channel(c4)/manifest.mpd
 
 More channels can be added to the same m3u8 file, and may also contain a mixture of DRM and non-DRM encrypted streams.
 Simply upload your m3u8 file into Dispatcharr and select dispatchwrapparr as the profile for any streams.
+
+## ❤️ Shoutouts
+
+This script was made possible thanks to many wonderful python libraries and open source projects.
+
+- [Dispatcharr](https://github.com/Dispatcharr/Dispatcharr) development community for making such an awesome stream manager!
+- [Streamlink](https://streamlink.github.io/) for their awesome API and stream handling capability
+- [titusau](https://github.com/titus-au/streamlink-plugin-dashdrm) who laid a lot of the groundwork for managing DASHDRM streams in streamlink!
 
 ## ⚖️ License
 This project is licensed under the [MIT License](LICENSE).
