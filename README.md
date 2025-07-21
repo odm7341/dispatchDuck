@@ -26,7 +26,7 @@ Example: `dispatchwrapparr.py -i <url> -ua <user-agent> [-proxy <proxy server]`
 
 ## 🚀 Installation
 
-Dispatchwrapparr is designed to work within the Dispatcharr docker container. Either copy the script into the container or add it into your configuration bind mount (recommended).
+Dispatchwrapparr is designed to work within the [Dispatcharr](https://github.com/Dispatcharr/Dispatcharr) docker container. Either copy the script into the container or add it into your configuration bind mount (recommended).
 
 1. Create a directory inside your Dispatcharr /data bind mount/volume map called 'dispatchwrapparr'.
 2. Download the python script dispatchwrapparr.py and copy it into the dispatchwrapper directory
