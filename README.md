@@ -39,6 +39,7 @@ Dispatchwrapparr is designed to work within the Dispatcharr docker container. Ei
 
 <img width="324" height="254" alt="image" src="https://github.com/user-attachments/assets/cee7ee08-102a-4b3b-9206-46a842e0b473" />
 
+
 If you wish to use a proxy server, create a separate profile:
 
 1. In the 'Name' field, type in 'dispatchwrapparr proxy'
