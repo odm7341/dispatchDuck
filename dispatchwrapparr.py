@@ -55,15 +55,6 @@ from streamlink.utils.l10n import Language
 from streamlink.utils.times import now
 
 """
-Global Variables
-
-Set these to modify the default behaviour of the wrapper script
-
-"""
-
-stream_selection = "best" # Passed to Streamlink for stream selection. Default: "best"
-
-"""
 Begin DASH DRM Plugin
 Code adapted from streamlink-plugin-dashdrm by titus-au: https://github.com/titus-au/streamlink-plugin-dashdrm
 A special thanks!
@@ -750,7 +741,7 @@ def main():
         return
 
     # Select best steam, live or iterate until one is found
-    stream = streams.get(stream_selection) or streams.get("live") or next(iter(streams.values()), None)
+    stream = streams.get("best") or streams.get("live") or next(iter(streams.values()), None)
 
     if not stream:
         print("[ERROR] No streams available.")
