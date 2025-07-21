@@ -71,7 +71,7 @@ This script was made possible thanks to many wonderful python libraries and open
 
 - [Dispatcharr](https://github.com/Dispatcharr/Dispatcharr) development community for making such an awesome stream manager!
 - [Streamlink](https://streamlink.github.io/) for their awesome API and stream handling capability
-- [titusau](https://github.com/titus-au/streamlink-plugin-dashdrm) who laid a lot of the groundwork for managing DASHDRM streams in streamlink!
+- [titus-au](https://github.com/titus-au/streamlink-plugin-dashdrm) who laid a lot of the groundwork for managing DASHDRM streams in streamlink!
 
 ## ⚖️ License
 This project is licensed under the [MIT License](LICENSE).
