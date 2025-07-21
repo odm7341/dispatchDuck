@@ -42,12 +42,13 @@ from typing import List, Self, Tuple, Optional
 from datetime import timedelta
 
 from streamlink import Streamlink
-from streamlink.exceptions import PluginError, FatalPluginError
+from streamlink.exceptions import PluginError, FatalPluginError, NoPluginError
 from streamlink.plugin import Plugin, pluginmatcher, pluginargument
 from streamlink.plugin.plugin import HIGH_PRIORITY, parse_params, stream_weight
 from streamlink.stream.dash import DASHStream, DASHStreamWorker, DASHStreamWriter, DASHStreamReader
 from streamlink.stream.dash.manifest import MPD, Representation
 from streamlink.stream.ffmpegmux import FFMPEGMuxer
+from streamlink.stream import HTTPStream, HLSStream, DASHStream
 from streamlink.utils.url import update_scheme
 from streamlink.session import Streamlink
 from streamlink.utils.l10n import Language
@@ -61,7 +62,6 @@ Set these to modify the default behaviour of the wrapper script
 """
 
 stream_selection = "best" # Passed to Streamlink for stream selection. Default: "best"
-bypass_rfc1918 = True # Bypass supplied proxy server for initial HTTP request. Default: True
 
 """
 Begin DASH DRM Plugin
@@ -623,67 +623,6 @@ def parse_args():
     parser.add_argument("-proxy", help="Optional HTTP proxy (e.g. http://127.0.0.1:8888)")
     return parser.parse_args()
 
-def check_rfc1918(raw_url: str, max_redirects: int = 3) -> str:
-    """
-    Parses the input URL to check if it connects or redirects to an RFC1918 address or localhost.
-    Follows up to `max_redirects` if redirects also point to private IPs.
-    """
-
-    # Regex to match private IPs and localhost (with optional user:pass and port)
-    pattern = re.compile(
-        r'^https?://'                                       # http or https
-        r'(?:[^\s/@]+:[^\s/@]+@)?'                          # optional user:pass@
-        r'(?:localhost|'                                    # localhost
-        r'127\.0\.0\.1|'                                    # 127.0.0.1
-        r'10\.(?:\d{1,3}\.){2}\d{1,3}|'                     # 10.x.x.x
-        r'172\.(?:1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}|'     # 172.16.x.x – 172.31.x.x
-        r'192\.168\.\d{1,3}\.\d{1,3}|'                      # 192.168.x.x
-        r'\[::1\])'                                         # IPv6 loopback
-        r'(?::\d+)?'                                        # optional port
-    )
-
-    def is_rfc1918_or_localhost(url: str) -> bool:
-        # First check regex
-        if pattern.match(url):
-            return True
-
-        # Then check DNS resolution
-        try:
-            hostname = urlparse(url).hostname
-            if not hostname:
-                return False
-            ip_list = socket.gethostbyname_ex(hostname)[2]
-            for ip in ip_list:
-                ip_obj = ipaddress.ip_address(ip)
-                if ip_obj.is_private or ip_obj.is_loopback:
-                    return True
-        except Exception as e:
-            print(f"DNS resolution error: {e}")
-        return False
-
-    def get_redirect_url(url: str) -> Optional[str]:
-        try:
-            response = requests.head(url, allow_redirects=False, timeout=5)
-            if response.status_code in (301, 302):
-                return response.headers.get("Location")
-            return None
-        except requests.RequestException as e:
-            print(f"Request failed: {e}")
-            return None
-
-    current_url = raw_url
-    for _ in range(max_redirects):
-        if not is_rfc1918_or_localhost(current_url):
-            return current_url
-        redirect = get_redirect_url(current_url)
-        if not redirect:
-            return current_url
-        # Normalize relative redirects
-        redirect = requests.compat.urljoin(current_url, redirect)
-        current_url = redirect
-
-    return current_url
-
 def check_clearkey(raw_url: str):
     """
     Parses the input URL. If it contains '#clearkey=', splits it into the stream URL and the ClearKey string.
@@ -701,17 +640,58 @@ def check_clearkey(raw_url: str):
         return stream_url, clearkey
     return raw_url, None
 
+
+
+def detect_stream_type(session, url, user_agent=None, proxy=None):
+    try:
+        return session.streams(url)
+    except NoPluginError:
+        print("[WARN] No plugin found for URL. Attempting fallback based on MIME type...")
+
+        headers = {
+            "User-Agent": user_agent or "Mozilla/5.0",
+            "Range": "bytes=0-1023"
+        }
+
+        proxies = {
+            "http": proxy,
+            "https": proxy
+        } if proxy else None
+
+        try:
+            response = requests.get(
+                url,
+                headers=headers,
+                proxies=proxies,
+                stream=True,
+                timeout=5
+            )
+            content_type = response.headers.get("Content-Type", "").lower()
+            print(f"[INFO] Detected Content-Type: {content_type}")
+        except Exception as e:
+            print(f"[ERROR] Could not detect stream type: {e}")
+            raise
+
+        if "vnd.apple.mpegurl" in content_type or "x-mpegurl" in content_type:
+            return HLSStream.parse_variant_playlist(session, url)
+        elif "dash+xml" in content_type:
+            return DASHStream.parse_manifest(session, url)
+        elif "video/mp2t" in content_type or "application/octet-stream" in content_type:
+            return {"live": HTTPStream(session, url)}
+        else:
+            print("[ERROR] Unrecognized Content-Type for fallback")
+            raise
+
+    except PluginError as e:
+        print(f"[ERROR] Plugin failed: {e}")
+        raise
+
 def main():
     # Parse input arguments
     args = parse_args()
 
     # Check -i (input URL) for a clearkey (#clearkey=)
     input_url, clearkey = check_clearkey(args.i)
-
-    # If proxy server is specified, check if input url is rfc1918 or localhost through IP checking and DNS lookup
-    # If the resource is local, check for a local redirector and use that URL instead. To bypass this behaviour, set the bypass_rfc1918 global var to False
-    if bypass_rfc1918 and args.proxy:
-        input_url = check_rfc1918(input_url)
 
     print(f"[INFO] Parsed URL: {input_url}")
 
@@ -760,20 +740,20 @@ def main():
         session.set_option("ffmpeg-start-at-zero", True) # Start at zero
         # Fetch the available streams
         try:
-            streams = session.streams(input_url)
-        except PluginError as e:
-            print(f"[ERROR] Failed to load regular stream: {e}")
+            streams = detect_stream_type(session, input_url, user_agent=args.ua, proxy=args.proxy)
+        except Exception as e:
+            print(f"[ERROR] Stream setup failed: {e}")
             return
 
     if not streams:
         print("[ERROR] No playable streams found.")
         return
 
-    # Select stream based on global var "stream_selection" - eg. "best"
-    stream = streams.get(stream_selection)
+    # Select best steam, live or iterate until one is found
+    stream = streams.get(stream_selection) or streams.get("live") or next(iter(streams.values()), None)
 
     if not stream:
-        print("[ERROR] 'best' stream not available.")
+        print("[ERROR] No streams available.")
         return
 
     # Open stream and pipe to stdout
