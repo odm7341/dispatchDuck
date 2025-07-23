@@ -2,7 +2,7 @@
 
 """
 
-Dispatchwrapparr - Version 0.1 Alpha: A wrapper for Dispatcharr that supports the following:
+Dispatchwrapparr - Version 0.2 Alpha: A wrapper for Dispatcharr that supports the following:
 
   - M3U8/DASH-MPD best stream selection, segment download handling and piping to ffmpeg
   - DASH-MPD DRM clearkey support
@@ -197,6 +197,7 @@ class FFMPEGMuxerDRM(FFMPEGMuxer):
             if keys and cmd == "-i":
                 _ = old_cmd.pop(0)
                 self._cmd.extend(["-re"])
+                self._cmd.extend(["-readrate_initial_burst", "10"])
                 self._cmd.extend(["-decryption_key", keys[key]])
                 self._cmd.extend(["-copyts"])
                 key += 1
@@ -699,10 +700,10 @@ def main():
         session.set_option("http-proxy", args.proxy)
 
     # Apply streamlink options that apply to all streams
-    session.set_option("ffmpeg-fout", "mpegts") # Encode as mpegts (not matroska like default)
+    session.set_option("ffmpeg-fout", "mpegts") # Encode as mpegts when ffmpeg muxing (not matroska like default)
     session.set_option("ffmpeg-verbose", True) # Pass ffmpeg stderr through to streamlink
-    session.set_option("stream-segment-threads", 2) # Create two threads for fetching segments
-
+    session.set_option("stream-segment-threads", 4) # Number of threads for fetching segments
+    session.set_option("hls-live-edge", 6) # Prebuffer n segments for HLS
     streams = None
 
     # If a clearkey is detected, prepare the stream for DRM decryption
@@ -714,7 +715,8 @@ def main():
         plugin = MPEGDASHDRM(session, input_url)
         # Set the dashdrm plugin options
         plugin.options["decryption-key"] = [clearkey] # pass clearkey tuple to plugin
-        plugin.options["presentation-delay"] = "30" # Begin DASH-DRM streams 30 seconds behind live
+        plugin.options["presentation-delay"] = 30 # Begin dash-drm streams n seconds behind live
+        # session.set_option("ringbuffer-size", 67108864) # ringbuffer size (64M)
         # session.set_option("ffmpeg-loglevel", "debug")
         # Fetch the available streams
         try:
@@ -726,9 +728,9 @@ def main():
     # For all other non-DRM/clearkey encrypted streams
     else:
         # Set session options for non-DRM streams
-        session.set_option("ffmpeg-copyts", True) # Copy timestamps enabled
-        session.set_option("hls-start-offset", 30) # Begin HLS streams 30 seconds behind live
-        session.set_option("ffmpeg-start-at-zero", True) # Start at zero
+        session.set_option("ffmpeg-copyts", True) # Copy timestamps enabled for ffmpeg muxing
+        session.set_option("hls-start-offset", 30) # Begin HLS streams n seconds behind live
+        session.set_option("ffmpeg-start-at-zero", True) # Start at zero for ffmpeg muxing
         # Fetch the available streams
         try:
             streams = detect_stream_type(session, input_url, user_agent=args.ua, proxy=args.proxy)
