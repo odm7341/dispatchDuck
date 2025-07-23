@@ -7,10 +7,11 @@
 
 ## 🤝 What does dispatchwrapparr do?
 
-✅ **Builtin DASHDRM Support** — Append `#clearkey=<clearkey>` to the end of the URL for clearkey/DRM decryption of livestreams\
+✅ **Builtin MPEG-DASH Clearkey/DRM Support** — Append `#clearkey=<clearkey>` to the end of the URL for clearkey/DRM decryption of livestreams\
 ✅ **High Performance** — Uses streamlink API's to offload segment downloading before passing to ffmpeg for muxing\
 ✅ **Highly Flexible** — Can support standard HLS, Mpeg-DASH as well as DASH-DRM, Youtube, Twitch and other livestreaming services as channels\
 ✅ **Proxy Support** — Full support for passing proxy servers to bypass geo restrictions\
+ ^|^e **Extended Stream Type Detection**  ^`^t Fallback option that checks MIME type of stream URL for streamlink plugin selection
 
 ---
 
