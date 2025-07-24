@@ -2,15 +2,16 @@
 
 """
 
-Dispatchwrapparr - Version 0.2 Alpha: A wrapper for Dispatcharr that supports the following:
+Dispatchwrapparr - Version 0.3 Alpha: A wrapper for Dispatcharr that supports the following:
 
   - M3U8/DASH-MPD best stream selection, segment download handling and piping to ffmpeg
   - DASH-MPD DRM clearkey support
   - HTTP Proxy Support
   - Support for Youtube Livestreams and many others
+  - Extended MIME-type stream detection for Streamlink
 
 Usage: dispatchwrapper.py -i <URL> -ua <User Agent String>
-Optional: -proxy <Proxy Server>
+Optional: -proxy <Proxy Server> -subtitles
 
 DRM/Clearkey Encrypted streams must be fed with #clearkey=<clearkey> at the end of the
 url string, or supply dispatcharr a custom m3u8 file formatted like the following Channel 4 UK example:
@@ -88,7 +89,7 @@ DASHDRM_OPTIONS = [
 @pluginargument(
     "use-subtitles",
     action="store_true",
-    help="Experiment with subtitles."
+    help="Enable subtitles"
 )
 
 class MPEGDASHDRM(Plugin):
@@ -604,15 +605,16 @@ class DASHStreamDRM(DASHStream):
 
 """
 End of DASHDRM Plugin Section
-Beginning of Dispatchwrappar Section
+Beginning of Dispatchwrapparr Section
 """
 
 def parse_args():
     # Initial wrapper arguments
-    parser = argparse.ArgumentParser(description="Dispatchwrappar: A wrapper for Dispatcharr")
+    parser = argparse.ArgumentParser(description="Dispatchwrapparr: A wrapper for Dispatcharr")
     parser.add_argument("-i", required=True, help="Input URL")
     parser.add_argument("-ua", required=True, help="User-Agent string")
     parser.add_argument("-proxy", help="Optional HTTP proxy (e.g. http://127.0.0.1:8888)")
+    parser.add_argument("-subtitles", action="store_true", help="Enable support for subtitles (if available)")
     return parser.parse_args()
 
 def check_clearkey(raw_url: str):
@@ -699,11 +701,15 @@ def main():
     if args.proxy:
         session.set_option("http-proxy", args.proxy)
 
+    # If -subtitles flag is set (mux-subtitles is False by default)
+    if args.subtitles:
+        session.set_option("mux-subtitles", True)
+
     # Apply streamlink options that apply to all streams
     session.set_option("ffmpeg-fout", "mpegts") # Encode as mpegts when ffmpeg muxing (not matroska like default)
     session.set_option("ffmpeg-verbose", True) # Pass ffmpeg stderr through to streamlink
     session.set_option("stream-segment-threads", 4) # Number of threads for fetching segments
-    session.set_option("hls-live-edge", 6) # Prebuffer n segments for HLS
+    #session.set_option("hls-live-edge", 6) # Prebuffer n segments for HLS
     streams = None
 
     # If a clearkey is detected, prepare the stream for DRM decryption
@@ -716,6 +722,8 @@ def main():
         # Set the dashdrm plugin options
         plugin.options["decryption-key"] = [clearkey] # pass clearkey tuple to plugin
         plugin.options["presentation-delay"] = 30 # Begin dash-drm streams n seconds behind live
+        if args.subtitles:
+            plugin.options["use-subtitles"]
         # session.set_option("ringbuffer-size", 67108864) # ringbuffer size (64M)
         # session.set_option("ffmpeg-loglevel", "debug")
         # Fetch the available streams
