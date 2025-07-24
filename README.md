@@ -22,7 +22,7 @@
 - `-proxy <proxy server>`: Optional proxy server. Supports http, https, socks4a and socks5h.
 - `-subtitles`: Optional to enable muxing of subtitles. Disabled by default.
 
-Example: `dispatchwrapparr.py -i <url> -ua <user-agent> [-proxy <proxy server -subtitles]`
+Example: `dispatchwrapparr.py -i <url> -ua <user-agent> [-proxy <proxy server> -subtitles]`
 
 ---
 
