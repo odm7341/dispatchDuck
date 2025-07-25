@@ -28,10 +28,10 @@ Example: `dispatchwrapparr.py -i <url> -ua <user-agent> [-proxy <proxy server> -
 
 ## 🚀 Script Installation
 
-1. This command will install dispatchwrapparr into your [Dispatcharr](https://github.com/Dispatcharr/Dispatcharr) docker container.
+1. This command will install Dispatchwrapparr into your [Dispatcharr](https://github.com/Dispatcharr/Dispatcharr) docker container.
 
-```
-docker exec -it dispatcharr sh -c "mkdir -p /data/dispatchwrapparr && curl -s 'https://raw.githubusercontent.com/jordandalley/dispatchwrapparr/refs/heads/main/dispatchwrapparr.py' -o '/data/dispatchwrapparr/dispatchwrapparr.py' && chmod +x '/data/dispatchwrapparr/dispatchwrapparr.py'"
+```bash
+docker exec -it dispatcharr bash -c "mkdir -p /data/dispatchwrapparr && curl -s 'https://raw.githubusercontent.com/jordandalley/dispatchwrapparr/refs/heads/main/dispatchwrapparr.py' -o '/data/dispatchwrapparr/dispatchwrapparr.py' && chmod +x '/data/dispatchwrapparr/dispatchwrapparr.py'"
 ```
 
 ## ➡️ Create a Dispatchwrapparr profile
