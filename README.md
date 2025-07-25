@@ -26,7 +26,14 @@ Example: `dispatchwrapparr.py -i <url> -ua <user-agent> [-proxy <proxy server> -
 
 ---
 
-## 🚀 Installation
+## 🚀 Quick Installation
+
+1. If you're running short on time, this command should work for you!
+
+`docker exec -it dispatcharr sh -c "mkdir -p /data/dispatchwrapparr && curl -s 'https://raw.githubusercontent.com/jordandalley/dispatchwrapparr/refs/heads/main/dispatchwrapparr.py' -o '/data/dispatchwrapparr/dispatchwrapparr.py' && chmod +x '/data/dispatchwrapparr/dispatchwrapparr.py'"`
+
+
+## 🚀 Manual Installation
 
 Dispatchwrapparr is designed to work within the [Dispatcharr](https://github.com/Dispatcharr/Dispatcharr) docker container. Either copy the script into the container or add it into your configuration bind mount (recommended).
 
