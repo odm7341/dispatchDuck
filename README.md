@@ -31,8 +31,8 @@ Example: `dispatchwrapparr.py -i <url> -ua <user-agent> [-proxy <proxy server> -
 1. This command will install Dispatchwrapparr into your [Dispatcharr](https://github.com/Dispatcharr/Dispatcharr) docker container.
 
 ```bash
-docker exec -it dispatcharr bash -c "mkdir -p /data/dispatchwrapparr && /
-curl -s 'https://raw.githubusercontent.com/jordandalley/dispatchwrapparr/refs/heads/main/dispatchwrapparr.py' -o '/data/dispatchwrapparr/dispatchwrapparr.py' && /
+docker exec -it dispatcharr bash -c "mkdir -p /data/dispatchwrapparr && \
+curl -s 'https://raw.githubusercontent.com/jordandalley/dispatchwrapparr/refs/heads/main/dispatchwrapparr.py' -o '/data/dispatchwrapparr/dispatchwrapparr.py' && \
 chmod +x '/data/dispatchwrapparr/dispatchwrapparr.py'"
 ```
 
