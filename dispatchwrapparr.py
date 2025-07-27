@@ -2,7 +2,7 @@
 
 """
 
-Dispatchwrapparr - Version 0.3 Alpha: A wrapper for Dispatcharr that supports the following:
+Dispatchwrapparr - Version 0.4 Beta: A wrapper for Dispatcharr that supports the following:
 
   - M3U8/DASH-MPD best stream selection, segment download handling and piping to ffmpeg
   - DASH-MPD DRM clearkey support
@@ -11,7 +11,7 @@ Dispatchwrapparr - Version 0.3 Alpha: A wrapper for Dispatcharr that supports th
   - Extended MIME-type stream detection for Streamlink
 
 Usage: dispatchwrapper.py -i <URL> -ua <User Agent String>
-Optional: -proxy <Proxy Server> -subtitles
+Optional: -proxy <Proxy Server> -subtitles -loglevel <Level>
 
 DRM/Clearkey Encrypted streams must be fed with #clearkey=<clearkey> at the end of the
 url string, or supply dispatcharr a custom m3u8 file formatted like the following Channel 4 UK example:
@@ -26,8 +26,10 @@ https://olsp.live.dash.c4assets.com/dash_iso_sp_tl/live/channel(c4)/manifest.mpd
 
 from __future__ import annotations
 
+import os
 import re
 import sys
+import signal
 import itertools
 import logging
 import base64
@@ -52,16 +54,18 @@ from streamlink.stream.ffmpegmux import FFMPEGMuxer
 from streamlink.stream import HTTPStream, HLSStream, DASHStream
 from streamlink.utils.url import update_scheme
 from streamlink.session import Streamlink
-from streamlink.utils.l10n import Language
+from streamlink.utils.l10n import Language, Localization
 from streamlink.utils.times import now
+
+# Global variables
+log = logging.getLogger("dispatchwrapparr")
+
 
 """
 Begin DASH DRM Plugin
 Code adapted from streamlink-plugin-dashdrm by titus-au: https://github.com/titus-au/streamlink-plugin-dashdrm
 A special thanks!
 """
-
-log = logging.getLogger(__name__)
 
 DASHDRM_OPTIONS = [
     "decryption-key",
@@ -615,7 +619,42 @@ def parse_args():
     parser.add_argument("-ua", required=True, help="User-Agent string")
     parser.add_argument("-proxy", help="Optional HTTP proxy (e.g. http://127.0.0.1:8888)")
     parser.add_argument("-subtitles", action="store_true", help="Enable support for subtitles (if available)")
+    parser.add_argument("-loglevel", type=str, default="INFO", choices=["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET"], help="Enable logging and set log level. (default: INFO)")
     return parser.parse_args()
+
+
+def configure_logging(level="INFO") -> logging.Logger:
+    """
+    Set up console logging for both the script and Streamlink.
+
+    Args:
+        level (str): Logging level. One of: "CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET".
+
+    Returns:
+        logging.Logger: Configured logger instance.
+    """
+    level = level.upper()
+    numeric_level = getattr(logging, level, logging.INFO)
+
+    # Set root logger (used by Streamlink internally)
+    root_logger = logging.getLogger()
+    root_logger.setLevel(numeric_level)
+
+    if not root_logger.handlers:
+        formatter = logging.Formatter("[%(name)s] %(asctime)s [%(levelname)s] %(message)s")
+        console = logging.StreamHandler()
+        console.setFormatter(formatter)
+        root_logger.addHandler(console)
+
+    # Ensure streamlink logger is not being filtered or silenced
+    streamlink_log = logging.getLogger("streamlink")
+    streamlink_log.setLevel(numeric_level)
+    streamlink_log.propagate = True
+
+    # Your application logger
+    log = logging.getLogger("dispatchwrapparr")
+    return log
+
 
 def check_clearkey(raw_url: str):
     """
@@ -640,7 +679,7 @@ def detect_stream_type(session, url, user_agent=None, proxy=None):
     try:
         return session.streams(url)
     except NoPluginError:
-        print("[WARN] No plugin found for URL. Attempting fallback based on MIME type...")
+        log.warning("No plugin found for URL. Attempting fallback based on MIME type...")
 
         headers = {
             "User-Agent": user_agent or "Mozilla/5.0",
@@ -661,9 +700,9 @@ def detect_stream_type(session, url, user_agent=None, proxy=None):
                 timeout=5
             )
             content_type = response.headers.get("Content-Type", "").lower()
-            print(f"[INFO] Detected Content-Type: {content_type}")
+            log.info(f"Detected Content-Type: {content_type}")
         except Exception as e:
-            print(f"[ERROR] Could not detect stream type: {e}")
+            log.error(f"Could not detect stream type: {e}")
             raise
 
         if "vnd.apple.mpegurl" in content_type or "x-mpegurl" in content_type:
@@ -673,21 +712,27 @@ def detect_stream_type(session, url, user_agent=None, proxy=None):
         elif "video/mp2t" in content_type or "application/octet-stream" in content_type:
             return {"live": HTTPStream(session, url)}
         else:
-            print("[ERROR] Unrecognized Content-Type for fallback")
+            log.error("Unrecognized Content-Type for fallback")
             raise
 
     except PluginError as e:
-        print(f"[ERROR] Plugin failed: {e}")
+        log.error(f"Plugin failed: {e}")
         raise
 
 def main():
+    # allow assignment to the module-level variable
+    global log
+
     # Parse input arguments
     args = parse_args()
+
+    # Configure logging
+    log = configure_logging(args.loglevel)
 
     # Check -i (input URL) for a clearkey (#clearkey=)
     input_url, clearkey = check_clearkey(args.i)
 
-    print(f"[INFO] Parsed URL: {input_url}")
+    log.info(f"Stream URL: {input_url}")
 
     # Start Streamlink session
     session = Streamlink()
@@ -705,16 +750,33 @@ def main():
     if args.subtitles:
         session.set_option("mux-subtitles", True)
 
+    # If loglevel set as option, pass the same loglevel to ffmpeg
+    python_loglevel = args.loglevel.upper() # Normalise the string and set python_loglevel var
+
+    # Create a dict with python to ffmpeg loglevel equivalencies
+    python_to_ffmpeg_loglevel = {
+        "CRITICAL": "panic",
+        "ERROR":    "error",
+        "WARNING":  "warning",
+        "INFO":     "info",
+        "DEBUG":    "debug",
+        "NOTSET":   "trace"
+    }
+
+    # Set variable with the equivalent loglevel
+    ffmpeg_loglevel = python_to_ffmpeg_loglevel.get(python_loglevel)
+    # Set the ffmpeg loglevel in the session options
+    session.set_option("ffmpeg-loglevel", ffmpeg_loglevel)
+
     # Apply streamlink options that apply to all streams
     session.set_option("ffmpeg-fout", "mpegts") # Encode as mpegts when ffmpeg muxing (not matroska like default)
     session.set_option("ffmpeg-verbose", True) # Pass ffmpeg stderr through to streamlink
     session.set_option("stream-segment-threads", 4) # Number of threads for fetching segments
-    #session.set_option("hls-live-edge", 6) # Prebuffer n segments for HLS
     streams = None
 
     # If a clearkey is detected, prepare the stream for DRM decryption
     if clearkey:
-        print(f"[INFO] ClearKey detected: {clearkey}")
+        log.info(f"ClearKey Detected: {clearkey}")
         # Prepend dashdrm:// to input_url for dashdrm plugin matching
         input_url = f"dashdrm://{input_url}"
         # Load dashdrm plugin
@@ -724,13 +786,11 @@ def main():
         plugin.options["presentation-delay"] = 30 # Begin dash-drm streams n seconds behind live
         if args.subtitles:
             plugin.options["use-subtitles"]
-        # session.set_option("ringbuffer-size", 67108864) # ringbuffer size (64M)
-        # session.set_option("ffmpeg-loglevel", "debug")
         # Fetch the available streams
         try:
             streams = plugin.streams()
         except PluginError as e:
-            print(f"[ERROR] Failed to load DRM plugin: {e}")
+            log.error(f"Failed to load DRM plugin: {e}")
             return
 
     # For all other non-DRM/clearkey encrypted streams
@@ -741,25 +801,27 @@ def main():
         session.set_option("ffmpeg-start-at-zero", True) # Start at zero for ffmpeg muxing
         # Fetch the available streams
         try:
-            streams = detect_stream_type(session, input_url, user_agent=args.ua, proxy=args.proxy)
+            streams = detect_stream_type(session, input_url, user_agent=args.ua, proxy=args.proxy) # Pass stream detection off to the detect_stream_type function
         except Exception as e:
-            print(f"[ERROR] Stream setup failed: {e}")
+            log.error(f"Stream setup failed: {e}")
             return
 
     if not streams:
-        print("[ERROR] No playable streams found.")
+        log.error("No playable streams found.")
         return
 
     # Select best steam, live or iterate until one is found
+    log.info("Selecting best available stream.")
     stream = streams.get("best") or streams.get("live") or next(iter(streams.values()), None)
 
     if not stream:
-        print("[ERROR] No streams available.")
+        log.error("No streams available.")
         return
 
     # Open stream and pipe to stdout
 
     try:
+        log.info("Starting stream.")
         with stream.open() as fd:
             while True:
                 data = fd.read(1024)
@@ -771,7 +833,10 @@ def main():
                 except BrokenPipeError:
                     break
     except KeyboardInterrupt:
-        print("[INFO] Stream interrupted, canceling.")
+        log.info("Stream interrupted, canceling.")
+
+# Set default SIGPIPE behavior so dispatchwrapparr exits cleanly when the pipe is closed
+signal.signal(signal.SIGPIPE, signal.SIG_DFL)
 
 if __name__ == "__main__":
     main()

@@ -20,9 +20,10 @@
 - `-i`: Required input URL
 - `-us`: Required user agent string
 - `-proxy <proxy server>`: Optional proxy server. Supports http, https, socks4a and socks5h.
-- `-subtitles`: Optional to enable muxing of subtitles. Disabled by default.
+- `-loglevel <loglevel>`: Optional to change the default log level of "INFO". Supported options: "CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", and "NOTSET".
+- `-subtitles`: Optional to enable muxing of subtitles. Disabled by default. NOTE: Subtitle support in streamlink is limited at best. May not work as intended.
 
-Example: `dispatchwrapparr.py -i <url> -ua <user-agent> [-proxy <proxy server> -subtitles]`
+Example: `dispatchwrapparr.py -i <url> -ua <user-agent> [-proxy <proxy server> -loglevel <log level> -subtitles]`
 
 ---
 
