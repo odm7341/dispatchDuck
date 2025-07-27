@@ -27,35 +27,35 @@ Example: `dispatchwrapparr.py -i <url> -ua <user-agent> [-proxy <proxy server> -
 
 ---
 
-## 🚀 Quick Installation
+## 🚀 Script Installation & Update
 
-1. If you're running short on time, this command should work for you!
+1. This command will install or update Dispatchwrapparr to the latest version into your [Dispatcharr](https://github.com/Dispatcharr/Dispatcharr) docker container.
 
-`docker exec -it dispatcharr sh -c "mkdir -p /data/dispatchwrapparr && curl -s 'https://raw.githubusercontent.com/jordandalley/dispatchwrapparr/refs/heads/main/dispatchwrapparr.py' -o '/data/dispatchwrapparr/dispatchwrapparr.py' && chmod +x '/data/dispatchwrapparr/dispatchwrapparr.py'"`
+```bash
+docker exec -it dispatcharr bash -c
+  "mkdir -p /data/dispatchwrapparr && \
+  curl -sSL \
+    'https://raw.githubusercontent.com/jordandalley/dispatchwrapparr/refs/heads/main/dispatchwrapparr.py' \
+    -o '/data/dispatchwrapparr/dispatchwrapparr.py' && \
+  chmod +x '/data/dispatchwrapparr/dispatchwrapparr.py'"
+```
 
+## ➡️ Create a Dispatchwrapparr profile
 
-## 🚀 Manual Installation
-
-Dispatchwrapparr is designed to work within the [Dispatcharr](https://github.com/Dispatcharr/Dispatcharr) docker container. Either copy the script into the container or add it into your configuration bind mount (recommended).
-
-1. Create a directory inside your Dispatcharr /data bind mount/volume map called 'dispatchwrapparr'.
-2. Download the python script dispatchwrapparr.py and copy it into the dispatchwrapper directory
-3. Make the script executable: `chmod +x /path/to/dispatcharr/data/dispatchwrapparr/dispatchwrapparr.py`
-4. Create a new profile in Dispatcharr under 'Settings' --> 'Stream Profiles'
-5. In the 'Name' field, type in 'dispatchwrapparr'
-6. In the 'Command' field, type in the location of the script as it would be inside the docker container, eg. `/data/dispatchwrapparr/dispatchwrapparr.py`
-7. In the 'Parameters' field, type in `-i {streamUrl} -ua {userAgent}`
-8. Now select 'dispatchwrapparr' as your preferred profile on any particular streams!
+1. Create a new profile in Dispatcharr under 'Settings' > 'Stream Profiles'
+2. In the 'Name' field, type in 'dispatchwrapparr'
+3. In the 'Command' field, type in the location of the script as it would be inside the docker container, eg. `/data/dispatchwrapparr/dispatchwrapparr.py`
+4. In the 'Parameters' field, type in `-i {streamUrl} -ua {userAgent}`
+5. Now select 'dispatchwrapparr' as your preferred profile on any particular streams!
 
 <img width="324" height="254" alt="image" src="https://github.com/user-attachments/assets/cee7ee08-102a-4b3b-9206-46a842e0b473" />
 
-
 If you wish to use a proxy server, create a separate profile:
 
-1. In the 'Name' field, type in 'dispatchwrapparr proxy'
-2. In the 'Command' field, type in the location of the script as it would be inside the docker container, eg. `/data/dispatchwrapparr/dispatchwrapparr.py`
-3. In the 'Parameters' field, type in `-i {streamUrl} -ua {userAgent} -proxy http://your.proxy.server:3128`
-4. Now select 'dispatchwrapparr proxy' on any streams that you wish to use the proxy server for.
+6. In the 'Name' field, type in 'dispatchwrapparr proxy'
+7. In the 'Command' field, type in the location of the script as it would be inside the docker container, eg. `/data/dispatchwrapparr/dispatchwrapparr.py`
+8. In the 'Parameters' field, type in `-i {streamUrl} -ua {userAgent} -proxy http://your.proxy.server:3128`
+9. Now select 'dispatchwrapparr proxy' on any streams that you wish to use the proxy server for.
 
 ---
 
