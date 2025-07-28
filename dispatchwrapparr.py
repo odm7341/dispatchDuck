@@ -2,7 +2,7 @@
 
 """
 
-Dispatchwrapparr - Version 0.4 Beta: A wrapper for Dispatcharr that supports the following:
+Dispatchwrapparr - Version 0.4.1 Beta: A wrapper for Dispatcharr that supports the following:
 
   - M3U8/DASH-MPD best stream selection, segment download handling and piping to ffmpeg
   - DASH-MPD DRM clearkey support
@@ -37,6 +37,8 @@ import argparse
 import requests
 import socket
 import ipaddress
+import fnmatch
+import json
 from urllib.parse import urlparse
 
 from collections import defaultdict
@@ -202,7 +204,7 @@ class FFMPEGMuxerDRM(FFMPEGMuxer):
             if keys and cmd == "-i":
                 _ = old_cmd.pop(0)
                 self._cmd.extend(["-re"])
-                self._cmd.extend(["-readrate_initial_burst", "10"])
+                self._cmd.extend(["-readrate_initial_burst", "4"])
                 self._cmd.extend(["-decryption_key", keys[key]])
                 self._cmd.extend(["-copyts"])
                 key += 1
@@ -618,6 +620,7 @@ def parse_args():
     parser.add_argument("-i", required=True, help="Input URL")
     parser.add_argument("-ua", required=True, help="User-Agent string")
     parser.add_argument("-proxy", help="Optional HTTP proxy (e.g. http://127.0.0.1:8888)")
+    parser.add_argument("-clearkeys", help="Optional Supply a json file or URL containing URL/Clearkey maps (e.g. 'clearkeys.json' or 'https://some.host/clearkeys.json')")
     parser.add_argument("-subtitles", action="store_true", help="Enable support for subtitles (if available)")
     parser.add_argument("-loglevel", type=str, default="INFO", choices=["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET"], help="Enable logging and set log level. (default: INFO)")
     return parser.parse_args()
@@ -655,8 +658,60 @@ def configure_logging(level="INFO") -> logging.Logger:
     log = logging.getLogger("dispatchwrapparr")
     return log
 
+def check_clearkeys_for_url(stream_url: str, clearkeys_source: str = None) -> str | None:
+    """
+    Return the ClearKey string from JSON mapping for the given stream URL.
+    Supports wildcard pattern matching. Defaults to ./clearkeys.json.
 
-def check_clearkey(raw_url: str):
+    Args:
+        stream_url (str): The stream URL to look up.
+        clearkeys_source (str, optional): Local file path or URL. Defaults to 'clearkeys.json' in same directory as dispatchwrapparr.py.
+
+    Returns:
+        str or None: ClearKey string, or None if not found.
+    """
+
+    def is_url(path_or_url):
+        parsed = urlparse(path_or_url)
+        return parsed.scheme in ('http', 'https')
+
+    def resolve_path(path: str) -> str:
+        """
+        Resolve a path to an absolute path.
+        If the path is already absolute, return as-is.
+        If it's relative, treat it as relative to the script's directory.
+        """
+        if os.path.isabs(path):
+            return path
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        return os.path.join(script_dir, path)
+
+    log.info(f"Clearkeys Source: '{clearkeys_source}'")
+
+    try:
+        log.info(f"Attempting to load json data from '{clearkeys_source}'")
+        if is_url(clearkeys_source):
+            response = requests.get(clearkeys_source, timeout=10)
+            response.raise_for_status()
+            keymap = response.json()
+        else:
+            resolved_file = resolve_path(clearkeys_source)
+            with open(resolved_file, "r") as f:
+                keymap = json.load(f)
+    except Exception as e:
+        log.error(f"Failed to load ClearKey JSON from '{clearkeys_source}': {e}")
+        return None
+
+    # Wildcard pattern matching
+    for pattern, clearkey in keymap.items():
+        if fnmatch.fnmatch(stream_url, pattern):
+            log.info(f"Clearkey(s) match for '{stream_url}': '{clearkey}'")
+            return clearkey
+
+    log.info(f"No matching clearkey(s) found for '{stream_url}'. Moving on.")
+    return None
+
+def check_clearkey_in_url(raw_url: str):
     """
     Parses the input URL. If it contains '#clearkey=', splits it into the stream URL and the ClearKey string.
 
@@ -720,34 +775,38 @@ def detect_stream_type(session, url, user_agent=None, proxy=None):
         raise
 
 def main():
-    # allow assignment to the module-level variable
-    global log
+    global log # allow assignment to the module-level variable
 
-    # Parse input arguments
-    args = parse_args()
+    args = parse_args() # Parse input arguments
 
-    # Configure logging
-    log = configure_logging(args.loglevel)
+    log = configure_logging(args.loglevel) # Configure logging
+    log.info(f"Log Level: '{args.loglevel}'")
 
-    # Check -i (input URL) for a clearkey (#clearkey=)
-    input_url, clearkey = check_clearkey(args.i)
+    clearkey = None # Initialise clearkey var
+    input_url, clearkey = check_clearkey_in_url(args.i) # Check -i (input URL) for a clearkey (#clearkey=) and set variable. Also create the input_url variable
+    log.info(f"Stream URL: '{input_url}'")
 
-    log.info(f"Stream URL: {input_url}")
+    # Check if we already have a clearkey from the check_clearkey_in_url() function, and if not check if we can find one by url if the -clearkeys parameter is set
+    if clearkey is None and args.clearkeys:
+        # If -clearkeys argument is supplied, search for a URL match in supplied file
+        clearkey = check_clearkeys_for_url(args.i,args.clearkeys)
 
-    # Start Streamlink session
-    session = Streamlink()
+    session = Streamlink() # Start Streamlink session
 
     # Apply the supplied user-agent string to streamlink session
+    log.info(f"User Agent: '{args.ua}'")
     session.set_option("http-headers", {
         "User-Agent": args.ua
     })
 
     # Apply proxy server to streamlink if supplied using -proxy parameter
     if args.proxy:
+        log.info(f"HTTP Proxy: '{args.proxy}'")
         session.set_option("http-proxy", args.proxy)
 
     # If -subtitles flag is set (mux-subtitles is False by default)
     if args.subtitles:
+        log.info(f"Subtitles: True")
         session.set_option("mux-subtitles", True)
 
     # If loglevel set as option, pass the same loglevel to ffmpeg
@@ -763,10 +822,9 @@ def main():
         "NOTSET":   "trace"
     }
 
-    # Set variable with the equivalent loglevel
-    ffmpeg_loglevel = python_to_ffmpeg_loglevel.get(python_loglevel)
-    # Set the ffmpeg loglevel in the session options
-    session.set_option("ffmpeg-loglevel", ffmpeg_loglevel)
+    ffmpeg_loglevel = python_to_ffmpeg_loglevel.get(python_loglevel) # Set variable with the equivalent loglevel
+
+    session.set_option("ffmpeg-loglevel", ffmpeg_loglevel) # Set the ffmpeg loglevel in the session options
 
     # Apply streamlink options that apply to all streams
     session.set_option("ffmpeg-fout", "mpegts") # Encode as mpegts when ffmpeg muxing (not matroska like default)
@@ -776,7 +834,7 @@ def main():
 
     # If a clearkey is detected, prepare the stream for DRM decryption
     if clearkey:
-        log.info(f"ClearKey Detected: {clearkey}")
+        log.info(f"Clearkey(s): '{clearkey}'")
         # Prepend dashdrm:// to input_url for dashdrm plugin matching
         input_url = f"dashdrm://{input_url}"
         # Load dashdrm plugin
@@ -824,7 +882,7 @@ def main():
         log.info("Starting stream.")
         with stream.open() as fd:
             while True:
-                data = fd.read(1024)
+                data = fd.read(188 * 64) # Match buffer settings of Dispatcharr for optimal MPEG-TS buffering
                 if not data:
                     break
                 try:
