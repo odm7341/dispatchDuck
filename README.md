@@ -92,7 +92,7 @@ Example of `clearkeys.json` file or output from an API/URL containing clearkeys.
 
 ```clearkeys.json
 {
-  "https://iptv.dalleyfamily.net/r/Channel4.uk.mpd": "5ce85f1aa5771900b952f0ba58857d7a",
+  "https://olsp.live.dash.c4assets.com/dash_iso_sp_tl/live/channel(c4)/manifest.mpd": "5ce85f1aa5771900b952f0ba58857d7a",
 }
 
 ```
