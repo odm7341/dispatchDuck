@@ -77,8 +77,8 @@ Easy! There are two methods, the first of which is the most simple for starting 
 https://olsp.live.dash.c4assets.com/dash_iso_sp_tl/live/channel(c4)/manifest.mpd#clearkey=5ce85f1aa5771900b952f0ba58857d7a
 ```
 
-	More channels can be added to the same m3u8 file, and may also contain a mixture of DRM and non-DRM encrypted streams.
-	Simply upload your m3u8 file into Dispatcharr and select dispatchwrapparr as the profile for any streams.
+- More channels can be added to the same m3u8 file, and may also contain a mixture of DRM and non-DRM encrypted streams.
+- Simply upload your m3u8 file into Dispatcharr and select dispatchwrapparr as the profile for any streams.
 
 2. The second method is to supply a json file or URL which contains mappings between stream URL's and a clearkeys by using the `-clearkeys` method.
 
