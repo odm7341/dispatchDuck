@@ -64,7 +64,7 @@ If you wish to use a proxy server, create a separate profile:
 
 Easy! There are two methods, the first of which is the most simple for starting out.
 
-***Method 1:*** Append #clearkey=<clearkey> to the URL of the stream in an m3u8 file or manual addition into Dispatcharr. Or,
+***Method 1: Append #clearkey=<clearkey> to the stream URL***
 
 You'll need the clearkeys in order to play DRM protected content. There are a number of ways to acquire the keys such as scripts and browser plugins.
 This script assumes that you have these keys already.
@@ -80,16 +80,17 @@ https://olsp.live.dash.c4assets.com/dash_iso_sp_tl/live/channel(c4)/manifest.mpd
 More channels can be added to the same m3u8 file, and may also contain a mixture of DRM and non-DRM encrypted streams.
 Simply upload your m3u8 file into Dispatcharr and select dispatchwrapparr as the profile for any streams.
 
-***Method 2:*** The second method is to supply a json file or URL which contains mappings between stream URL's and a clearkeys by using the `-clearkeys` method.
+***Method 2: Use `-clearkeys` directive to supply a json file or URL containing URL to Clearkey mappings***
 
-The `-clearkeys` directive behaves in the following way:
+The `-clearkeys` directive can be supplied with a json formatted file or URL containing URL's which map to clearkeys, and performs this function in the following ways:
 
-- Wildcards are supported. Eg. to match a clearkey to a specific URL, you can specify wildcards in the URL string. Eg. `https://olsp.live.dash.c4assets.com/dash_iso_sp_tl/live/channel(c4)/*.mpd`
-- When a URL is supplied, it will ignore the `-proxy` directive for fetching clearkeys. It assumes that a proxy is not required for this request. This means you could create your own clearkeys API that runs locally.
+- Wildcards are supported. Eg. to match a clearkey to a specific URL, you can specify wildcards in the URL string. Eg. `https://olsp.live.dash.c4assets.com/*/live/channel(c4)/*.mpd`
+- When a URL is supplied, it will ignore the `-proxy` directive for fetching clearkeys. It assumes that a proxy is not required for this request. This allows you to create your own clearkeys API that runs locally.
 - When a file is supplied without an absolute path, it will assume that the file is in the same directory as the script. Eg. `-clearkeys clearkeys.json` would resolve to `/data/dispatchwrapparr/clearkeys.json`.
-- Supports KID:KEY combinations, and comma delimited lists of clearkeys if video and audio feeds are different.
+- Supports KID:KEY combinations, and comma delimited lists of clearkeys where multiple keys are required.
+- If no stream URL matches a clearkey, the script will continue processing the stream as normal.
 
-Example of `clearkeys.json` file or output from an API/URL containing clearkeys. Again, below is an example that could be used for Channel 4 (UK):
+Below is an example of a `clearkeys.json` file or an expected output from an API/URL containing clearkeys. Again, below is an example that could be used for Channel 4 (UK):
 
 ```clearkeys.json
 {
