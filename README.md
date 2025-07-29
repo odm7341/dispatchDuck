@@ -81,6 +81,12 @@ https://olsp.live.dash.c4assets.com/dash_iso_sp_tl/live/channel(c4)/manifest.mpd
 More channels can be added to the same m3u8 file, and may also contain a mixture of DRM and non-DRM encrypted streams.
 Simply upload your m3u8 file into Dispatcharr and select dispatchwrapparr as the profile for any streams.
 
+**Note:** If you are to use this option, be sure to remove the 'URL' item from the 'M3U Hash Key' setting. This can be found in 'Settings' -> 'Stream Settings' in Dispatcharr.
+
+The reason for this is that if the Clearkey ever changes then the channel hash is lost and you will need to re add the channel.
+
+<img width="170" height="71" alt="image" src="https://github.com/user-attachments/assets/abbc4b6f-f878-44b3-906b-b0981df105e4" />
+
 ***Method 2: Use `-clearkeys` directive to supply a json file or URL containing URL to Clearkey mappings***
 
 The `-clearkeys` directive can be supplied with a json formatted file or URL containing URL's which map to clearkeys, and performs this function in the following ways:
