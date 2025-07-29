@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 
 """
-
-Dispatchwrapparr - Version 0.4.1 Beta: A wrapper for Dispatcharr that supports the following:
+Dispatchwrapparr - Version 0.4.2 Beta: A wrapper for Dispatcharr that supports the following:
 
   - M3U8/DASH-MPD best stream selection, segment download handling and piping to ffmpeg
   - DASH-MPD DRM clearkey support
@@ -11,17 +10,7 @@ Dispatchwrapparr - Version 0.4.1 Beta: A wrapper for Dispatcharr that supports t
   - Extended MIME-type stream detection for Streamlink
 
 Usage: dispatchwrapper.py -i <URL> -ua <User Agent String>
-Optional: -proxy <Proxy Server> -subtitles -loglevel <Level>
-
-DRM/Clearkey Encrypted streams must be fed with #clearkey=<clearkey> at the end of the
-url string, or supply dispatcharr a custom m3u8 file formatted like the following Channel 4 UK example:
-
----------------------------------------------------- channel-4.m3u8 ------------------------------------------------------
-#EXTM3U
-#EXTINF:-1 group-title="United Kingdom",Channel 4
-https://olsp.live.dash.c4assets.com/dash_iso_sp_tl/live/channel(c4)/manifest.mpd#clearkey=5ce85f1aa5771900b952f0ba58857d7a
--------------------------------------------------------------------------------------------------------------------------
-
+Optional: -proxy <proxy server> -proxybypass <proxy bypass list> -clearkeys <file/url> -loglevel <level> -subtitles
 """
 
 from __future__ import annotations
@@ -204,7 +193,7 @@ class FFMPEGMuxerDRM(FFMPEGMuxer):
             if keys and cmd == "-i":
                 _ = old_cmd.pop(0)
                 self._cmd.extend(["-re"])
-                self._cmd.extend(["-readrate_initial_burst", "4"])
+                self._cmd.extend(["-readrate_initial_burst", "10"])
                 self._cmd.extend(["-decryption_key", keys[key]])
                 self._cmd.extend(["-copyts"])
                 key += 1
@@ -213,7 +202,6 @@ class FFMPEGMuxerDRM(FFMPEGMuxer):
                 if key == len(keys):
                     key = 1
                 self._cmd.extend([cmd, _])
-                # self._cmd.extend(['-thread_queue_size', '4096'])
             elif subtitles and cmd == "-c:a":
                 _ = old_cmd.pop(0)
                 self._cmd.extend([cmd, _])
@@ -223,6 +211,9 @@ class FFMPEGMuxerDRM(FFMPEGMuxer):
         if self._cmd and (self._cmd[-1].startswith("pipe:") or not self._cmd[-1].startswith("-")):
             final_output = self._cmd.pop()
             self._cmd.extend(["-mpegts_copyts", "1"])
+            self._cmd.extend(["-fflags", "+flush_packets"])
+            self._cmd.extend(["-flush_packets", "1"])
+            self._cmd.extend(["-max_delay", "50000"])
             self._cmd.append(final_output)
         log.debug("Updated ffmpeg command %s", self._cmd)
 
@@ -620,10 +611,17 @@ def parse_args():
     parser.add_argument("-i", required=True, help="Input URL")
     parser.add_argument("-ua", required=True, help="User-Agent string")
     parser.add_argument("-proxy", help="Optional HTTP proxy (e.g. http://127.0.0.1:8888)")
+    parser.add_argument("-proxybypass", help="Comma-separated list of hostnames or IP patterns to bypass the proxy (e.g. '192.168.*.*,*.lan')")
     parser.add_argument("-clearkeys", help="Optional Supply a json file or URL containing URL/Clearkey maps (e.g. 'clearkeys.json' or 'https://some.host/clearkeys.json')")
     parser.add_argument("-subtitles", action="store_true", help="Enable support for subtitles (if available)")
     parser.add_argument("-loglevel", type=str, default="INFO", choices=["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET"], help="Enable logging and set log level. (default: INFO)")
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    # Enforce dependency for proxybypass, must be used with proxy (duh!!)
+    if args.proxybypass and not args.proxy:
+        parser.error("argument -proxybypass: requires -proxy to be set")
+
+    return args
 
 
 def configure_logging(level="INFO") -> logging.Logger:
@@ -657,6 +655,47 @@ def configure_logging(level="INFO") -> logging.Logger:
     # Your application logger
     log = logging.getLogger("dispatchwrapparr")
     return log
+
+def proxy_bypass_req(url: str, useragent: str, bypasslist: str) -> str | None:
+    """
+    Determines what to do with supplied -proxybypass list
+    - If supplied URL's hostname is not in bypass list, return the same URL and use proxy.
+    - If '200' OK received, return 'None'. Main function will remove the proxy server for the given URL for processing.
+    - If '301' or '302' redirector occurs, follow redirects until proxy bypass list not longer matches hostname, then return the new URL.
+    - If any other HTTP code is received, throw an error and fallback to the original URL and continue to use proxy.
+    """
+    headers = {"User-Agent": useragent}
+    proxies = {}  # no proxy: we're testing bypass
+    bypass_patterns = [pattern.strip() for pattern in bypasslist.split(",")]
+
+    try:
+        # First check: is original host in bypass list?
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        if not hostname or not any(fnmatch.fnmatch(hostname, pat) for pat in bypass_patterns):
+            return url  # hostname not in bypass list — use proxy
+
+        # Hostname *is* in bypass list, begin checking for redirects
+        while True:
+            response = requests.get(url, headers=headers, proxies=proxies, allow_redirects=False, timeout=5)
+            status = response.status_code
+            if status == 200:
+                return None  # good response, no proxy needed
+            elif status in (301, 302):
+                location = response.headers.get("Location")
+                if not location:
+                    break
+                next_host = urlparse(location).hostname
+                if next_host and any(fnmatch.fnmatch(next_host, pat) for pat in bypass_patterns):
+                    url = location
+                    continue
+                else:
+                    return location  # left bypass list
+            else:
+                return url  # unexpected code, return original
+    except Exception as e:
+        log.warning(f"proxy_bypass_req failed: {e}")
+        return url  # fallback to original
 
 def check_clearkeys_for_url(stream_url: str, clearkeys_source: str = None) -> str | None:
     """
@@ -785,28 +824,40 @@ def main():
     clearkey = None # Initialise clearkey var
     input_url, clearkey = check_clearkey_in_url(args.i) # Check -i (input URL) for a clearkey (#clearkey=) and set variable. Also create the input_url variable
     log.info(f"Stream URL: '{input_url}'")
+    log.info(f"User Agent: '{args.ua}'")
+    if args.proxy:
+        log.info(f"HTTP Proxy: '{args.proxy}'")
 
     # Check if we already have a clearkey from the check_clearkey_in_url() function, and if not check if we can find one by url if the -clearkeys parameter is set
     if clearkey is None and args.clearkeys:
         # If -clearkeys argument is supplied, search for a URL match in supplied file
         clearkey = check_clearkeys_for_url(args.i,args.clearkeys)
 
+    # If -proxybypass is supplied, check url hostname matches any bypasses
+    if args.proxybypass:
+        log.info(f"Proxy Bypass: '{args.proxybypass}'")
+        bypass_result = proxy_bypass_req(input_url, args.ua, args.proxybypass)
+        if bypass_result is None:
+            log.info("Bypassing supplied proxy for stream URL: '{input_url}'")
+            args.proxy = None
+        else:
+            input_url = bypass_result
+            log.info(f"Determined stream URL to proxy: '{input_url}'")
+
     session = Streamlink() # Start Streamlink session
 
     # Apply the supplied user-agent string to streamlink session
-    log.info(f"User Agent: '{args.ua}'")
     session.set_option("http-headers", {
         "User-Agent": args.ua
     })
 
     # Apply proxy server to streamlink if supplied using -proxy parameter
     if args.proxy:
-        log.info(f"HTTP Proxy: '{args.proxy}'")
         session.set_option("http-proxy", args.proxy)
 
     # If -subtitles flag is set (mux-subtitles is False by default)
     if args.subtitles:
-        log.info(f"Subtitles: True")
+        log.info(f"Mux Subtitles: Enabled (may or may not work)")
         session.set_option("mux-subtitles", True)
 
     # If loglevel set as option, pass the same loglevel to ffmpeg
@@ -829,7 +880,7 @@ def main():
     # Apply streamlink options that apply to all streams
     session.set_option("ffmpeg-fout", "mpegts") # Encode as mpegts when ffmpeg muxing (not matroska like default)
     session.set_option("ffmpeg-verbose", True) # Pass ffmpeg stderr through to streamlink
-    session.set_option("stream-segment-threads", 4) # Number of threads for fetching segments
+    session.set_option("stream-segment-threads", 2) # Number of threads for fetching segments
     streams = None
 
     # If a clearkey is detected, prepare the stream for DRM decryption

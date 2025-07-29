@@ -10,7 +10,7 @@
 ✅ **Builtin MPEG-DASH Clearkey/DRM Support** — Either append `#clearkey=<clearkey>` to the end of the URL or include a clearkeys json file or URL for DRM decryption\
 ✅ **High Performance** — Uses streamlink API's to offload segment downloading before passing to ffmpeg for muxing\
 ✅ **Highly Flexible** — Can support standard HLS, Mpeg-DASH as well as DASH-DRM, Youtube, Twitch and other livestreaming services as channels\
-✅ **Proxy Support** — Full support for passing proxy servers to bypass geo restrictions\
+✅ **Proxy Support** — Full support for passing proxy servers to bypass geo restrictions. Also support for bypassing proxy for specific URL's used in initial redirections\
 ✅ **Extended Stream Type Detection** — Fallback option that checks MIME type of stream URL for streamlink plugin selection
 
 ---
@@ -18,13 +18,14 @@
 ## ⚙️ CLI Usage
 
 - `-i`: Required input URL
-- `-us`: Required user agent string
-- `-proxy <proxy server>`: Optional: Configure a proxy server. Supports http, https, socks4a and socks5h.
+- `-ua`: Required user agent string
+- `-proxy <proxy server>`: Optional: Configure a proxy server. Supports http, https only.
+- `-proxybypass <comma-delimited hostnames>`: Optional. To be used in conjunction with `-proxy` directive. Supply a comma-delimited list of hostnames to be bypassed from supplied proxy. Wildcards supported.
 - `-clearkeys <clearkey file or url>`: Optional: Supply a json file or URL containing json URL to clearkey mappings
 - `-loglevel <loglevel>`: Optional to change the default log level of "INFO". Supported options: "CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", and "NOTSET".
 - `-subtitles`: Optional to enable muxing of subtitles. Disabled by default. NOTE: Subtitle support in streamlink is limited at best. May not work as intended.
 
-Example: `dispatchwrapparr.py -i <url> -ua <user-agent> [-proxy <proxy server> -clearkeys <clearkey file or url> -loglevel <log level> -subtitles]`
+Example: `dispatchwrapparr.py -i {streamUrl} -ua {userAgent} [-proxy 'http://your.proxy.server:3128' -proxybypass '192.168.0.*,*.somesite.com' -clearkeys 'clearkeys.json' -loglevel 'INFO' -subtitles]`
 
 ---
 
