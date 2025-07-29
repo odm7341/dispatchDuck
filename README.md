@@ -87,6 +87,7 @@ The reason for this is that if the Clearkey ever changes then the channel hash i
 
 <img width="170" height="71" alt="image" src="https://github.com/user-attachments/assets/abbc4b6f-f878-44b3-906b-b0981df105e4" />
 
+
 ***Method 2: Use `-clearkeys` directive to supply a json file or URL containing URL to Clearkey mappings***
 
 The `-clearkeys` directive can be supplied with a json formatted file or URL containing URL's which map to clearkeys, and performs this function in the following ways:
