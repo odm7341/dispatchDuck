@@ -83,9 +83,9 @@ Simply upload your m3u8 file into Dispatcharr and select dispatchwrapparr as the
 
 **Note:** If you are to use this option, be sure to remove the 'URL' item from the 'M3U Hash Key' setting. This can be found in 'Settings' -> 'Stream Settings' in Dispatcharr.
 
-The reason for this is that if the Clearkey ever changes then the channel hash is lost and you will need to re add the channel.
-
 <img width="170" height="71" alt="image" src="https://github.com/user-attachments/assets/abbc4b6f-f878-44b3-906b-b0981df105e4" />
+
+The reason why we remove the URL from the hash settings is because if the clearkey ever has to change (many channels rotate theirs regularly), then Dispatcharr won't treat the channel as new.
 
 
 ***Method 2: Use `-clearkeys` directive to supply a json file or URL containing URL to Clearkey mappings***
