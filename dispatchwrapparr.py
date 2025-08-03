@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-Dispatchwrapparr - Version 0.4.4 Beta: A wrapper for Dispatcharr that supports the following:
+Dispatchwrapparr - Version 0.4.5 Beta: A wrapper for Dispatcharr that supports the following:
 
   - M3U8/DASH-MPD best stream selection, segment download handling and piping to ffmpeg
   - DASH-MPD DRM clearkey support
@@ -905,7 +905,6 @@ def main():
     else:
         # Set session options for non-DRM streams
         session.set_option("ffmpeg-copyts", True) # Copy timestamps enabled for ffmpeg muxing
-        session.set_option("hls-start-offset", 30) # Begin HLS streams n seconds behind live
         session.set_option("ffmpeg-start-at-zero", True) # Start at zero for ffmpeg muxing
         # Fetch the available streams
         try:
