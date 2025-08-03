@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-Dispatchwrapparr - Version 0.4.2 Beta: A wrapper for Dispatcharr that supports the following:
+Dispatchwrapparr - Version 0.4.3 Beta: A wrapper for Dispatcharr that supports the following:
 
   - M3U8/DASH-MPD best stream selection, segment download handling and piping to ffmpeg
   - DASH-MPD DRM clearkey support
@@ -193,7 +193,7 @@ class FFMPEGMuxerDRM(FFMPEGMuxer):
             if keys and cmd == "-i":
                 _ = old_cmd.pop(0)
                 self._cmd.extend(["-re"])
-                self._cmd.extend(["-readrate_initial_burst", "10"])
+                self._cmd.extend(["-readrate_initial_burst", "30"])
                 self._cmd.extend(["-decryption_key", keys[key]])
                 self._cmd.extend(["-copyts"])
                 key += 1
@@ -211,9 +211,9 @@ class FFMPEGMuxerDRM(FFMPEGMuxer):
         if self._cmd and (self._cmd[-1].startswith("pipe:") or not self._cmd[-1].startswith("-")):
             final_output = self._cmd.pop()
             self._cmd.extend(["-mpegts_copyts", "1"])
-            self._cmd.extend(["-fflags", "+flush_packets"])
-            self._cmd.extend(["-flush_packets", "1"])
-            self._cmd.extend(["-max_delay", "50000"])
+            #self._cmd.extend(["-fflags", "+flush_packets"])
+            #self._cmd.extend(["-flush_packets", "1"])
+            #self._cmd.extend(["-max_delay", "50000"])
             self._cmd.append(final_output)
         log.debug("Updated ffmpeg command %s", self._cmd)
 
@@ -741,9 +741,9 @@ def check_clearkeys_for_url(stream_url: str, clearkeys_source: str = None) -> st
         log.error(f"Failed to load ClearKey JSON from '{clearkeys_source}': {e}")
         return None
 
-    # Wildcard pattern matching
+    # Wildcard pattern matching (case-insensitive)
     for pattern, clearkey in keymap.items():
-        if fnmatch.fnmatch(stream_url, pattern):
+        if fnmatch.fnmatchcase(stream_url.lower(), pattern.lower()):
             log.info(f"Clearkey(s) match for '{stream_url}': '{clearkey}'")
             return clearkey
 
@@ -854,6 +854,8 @@ def main():
     # Apply proxy server to streamlink if supplied using -proxy parameter
     if args.proxy:
         session.set_option("http-proxy", args.proxy)
+        # set ipv4 only mode when using proxy
+        session.set_option("ipv4", True)
 
     # If -subtitles flag is set (mux-subtitles is False by default)
     if args.subtitles:
