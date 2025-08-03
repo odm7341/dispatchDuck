@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-Dispatchwrapparr - Version 0.4.3 Beta: A wrapper for Dispatcharr that supports the following:
+Dispatchwrapparr - Version 0.4.4 Beta: A wrapper for Dispatcharr that supports the following:
 
   - M3U8/DASH-MPD best stream selection, segment download handling and piping to ffmpeg
   - DASH-MPD DRM clearkey support
@@ -193,7 +193,7 @@ class FFMPEGMuxerDRM(FFMPEGMuxer):
             if keys and cmd == "-i":
                 _ = old_cmd.pop(0)
                 self._cmd.extend(["-re"])
-                self._cmd.extend(["-readrate_initial_burst", "30"])
+                self._cmd.extend(["-readrate_initial_burst", "6"])
                 self._cmd.extend(["-decryption_key", keys[key]])
                 self._cmd.extend(["-copyts"])
                 key += 1
@@ -211,9 +211,6 @@ class FFMPEGMuxerDRM(FFMPEGMuxer):
         if self._cmd and (self._cmd[-1].startswith("pipe:") or not self._cmd[-1].startswith("-")):
             final_output = self._cmd.pop()
             self._cmd.extend(["-mpegts_copyts", "1"])
-            #self._cmd.extend(["-fflags", "+flush_packets"])
-            #self._cmd.extend(["-flush_packets", "1"])
-            #self._cmd.extend(["-max_delay", "50000"])
             self._cmd.append(final_output)
         log.debug("Updated ffmpeg command %s", self._cmd)
 
