@@ -7,10 +7,11 @@
 
 ## 🤝 What does dispatchwrapparr do?
 
-✅ **Builtin MPEG-DASH Clearkey/DRM Support** — Either append `#clearkey=<clearkey>` to the end of the URL or include a clearkeys json file or URL for DRM decryption\
-✅ **High Performance** — Uses streamlink API's to offload segment downloading before passing to ffmpeg for muxing\
+✅ **Builtin MPEG-DASH Clearkey/DRM Support** — Either append a `#clearkey=<clearkey>` fragment to the end of the URL or include a clearkeys json file or URL for DRM decryption\
+✅ **High Performance** — Uses streamlink API's for segment dowloading which significantly improves channel start times\
 ✅ **Highly Flexible** — Can support standard HLS, Mpeg-DASH as well as DASH-DRM, Youtube, Twitch and other livestreaming services as channels\
 ✅ **Proxy Support** — Full support for passing proxy servers to bypass geo restrictions. Also support for bypassing proxy for specific URL's used in initial redirections\
+✅ **Custom Header Support** — Currenly supports the 'Referer' header by appending a `#referer=<URL>` fragment to the end of the URL\
 ✅ **Extended Stream Type Detection** — Fallback option that checks MIME type of stream URL for streamlink plugin selection
 
 ---
@@ -65,12 +66,12 @@ If you wish to use a proxy server, create a separate profile:
 
 Easy! There are two methods, the first of which is the most simple for starting out.
 
-***Method 1: Append #clearkey=<clearkey> to the stream URL***
+***Method 1: Append a #clearkey=<clearkey> fragment to the stream URL***
 
 You'll need the clearkeys in order to play DRM protected content. There are a number of ways to acquire the keys such as scripts and browser plugins.
 This script assumes that you have these keys already.
 
-To play these streams, simply create a custom m3u8 file that places #clearkey=<clearkey> at the end of the stream URL. Below is an example that could be used for Channel 4 (UK):
+To play these streams, simply create a custom m3u8 file that places the #clearkey=<clearkey> fragment at the end of the stream URL. Below is an example that could be used for Channel 4 (UK):
 
 ```channel-4-uk.m3u8
 #EXTM3U
@@ -80,6 +81,8 @@ https://olsp.live.dash.c4assets.com/dash_iso_sp_tl/live/channel(c4)/manifest.mpd
 
 More channels can be added to the same m3u8 file, and may also contain a mixture of DRM and non-DRM encrypted streams.
 Simply upload your m3u8 file into Dispatcharr and select dispatchwrapparr as the profile for any streams.
+
+The `#clearkey=<clearkey>` can also be used in conjunction with other fragments. Eg: `https://olsp.live.dash.c4assets.com/dash_iso_sp_tl/live/channel(c4)/manifest.mpd#referer=https://www.channel4.com&clearkey=5ce85f1aa5771900b952f0ba58857d7a`
 
 **Note:** If you are to use this option, be sure to remove the 'URL' item from the 'M3U Hash Key' setting. This can be found in 'Settings' -> 'Stream Settings' in Dispatcharr.
 
@@ -106,6 +109,16 @@ Below is an example of a `clearkeys.json` file or an expected output from an API
 }
 
 ```
+
+## ✨ Can I use custom headers?
+
+Yes, however at this time only the additional 'Referer' header is supported.
+
+To use a 'Referer' header, simply append the `#referer=<URL>` fragment to the end of the strean URL.
+
+The `#referer=<URL>` fragment can also be used in conjunction with other fragments such as `#clearkey=<clearkey>` if needed.
+
+If required, more custom headers could be added later. If you have a good use-case for this, please feel free to log a feature request.
 
 ## ❤️ Shoutouts
 

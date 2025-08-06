@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-Dispatchwrapparr - Version 0.4.5 Beta: A wrapper for Dispatcharr that supports the following:
+Dispatchwrapparr - Version 0.5: A wrapper for Dispatcharr that supports the following:
 
   - M3U8/DASH-MPD best stream selection, segment download handling and piping to ffmpeg
   - DASH-MPD DRM clearkey support
@@ -28,7 +28,7 @@ import socket
 import ipaddress
 import fnmatch
 import json
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 
 from collections import defaultdict
 from contextlib import suppress
@@ -653,7 +653,7 @@ def configure_logging(level="INFO") -> logging.Logger:
     log = logging.getLogger("dispatchwrapparr")
     return log
 
-def proxy_bypass_req(url: str, useragent: str, bypasslist: str) -> str | None:
+def proxy_bypass_req(url: str, useragent: str, referer: str, bypasslist: str) -> str | None:
     """
     Determines what to do with supplied -proxybypass list
     - If supplied URL's hostname is not in bypass list, return the same URL and use proxy.
@@ -661,7 +661,14 @@ def proxy_bypass_req(url: str, useragent: str, bypasslist: str) -> str | None:
     - If '301' or '302' redirector occurs, follow redirects until proxy bypass list not longer matches hostname, then return the new URL.
     - If any other HTTP code is received, throw an error and fallback to the original URL and continue to use proxy.
     """
-    headers = {"User-Agent": useragent}
+
+    headers = {
+        "User-Agent": useragent
+    }
+
+    if referer:
+        headers["Referer"] = referer
+
     proxies = {}  # no proxy: we're testing bypass
     bypass_patterns = [pattern.strip() for pattern in bypasslist.split(",")]
 
@@ -747,23 +754,28 @@ def check_clearkeys_for_url(stream_url: str, clearkeys_source: str = None) -> st
     log.info(f"No matching clearkey(s) found for '{stream_url}'. Moving on.")
     return None
 
-def check_clearkey_in_url(raw_url: str):
+def check_url_fragments(raw_url: str):
     """
-    Parses the input URL. If it contains '#clearkey=', splits it into the stream URL and the ClearKey string.
-
-    The ClearKey string may be a single key or a comma-delimited list of keys (optionally including KIDs).
+    Parses the input URL and extracts fragment parameters into a dictionary.
 
     Args:
-        raw_url (str): The raw URL from the -i argument.
+        raw_url (str): The full URL, possibly with fragments.
 
     Returns:
-        tuple: (stream_url, clearkey) where clearkey is the extracted string or None.
+        tuple: (base_url, fragment_dict) where fragment_dict is a dictionary of fragment key-value pairs,
+               or None if no fragment is present.
     """
-    if '#clearkey=' in raw_url:
-        stream_url, clearkey = raw_url.split('#clearkey=', 1)
-        return stream_url, clearkey
-    return raw_url, None
+    parsed = urlparse(raw_url)
 
+    base_url = parsed._replace(fragment="").geturl()
+    fragment = parsed.fragment
+
+    if fragment:
+        # parse_qs returns a dict with values as lists
+        parsed_fragments = {k: v[0] if len(v) == 1 else v for k, v in parse_qs(fragment).items()}
+        return base_url, parsed_fragments
+    else:
+        return base_url, None
 
 
 def detect_stream_type(session, url, user_agent=None, proxy=None):
@@ -818,9 +830,17 @@ def main():
     log = configure_logging(args.loglevel) # Configure logging
     log.info(f"Log Level: '{args.loglevel}'")
 
-    clearkey = None # Initialise clearkey var
-    input_url, clearkey = check_clearkey_in_url(args.i) # Check -i (input URL) for a clearkey (#clearkey=) and set variable. Also create the input_url variable
+    input_url, fragments = check_url_fragments(args.i) # Check -i (input URL) for any fragments appended to url (#whatever=thing&#someotherthing=this).
     log.info(f"Stream URL: '{input_url}'")
+
+    clearkey = None # Initialise clearkey var
+    referer = None # Initialise the referer var
+
+    # If there are fragments, set them safely
+    if fragments:
+        clearkey = fragments.get("clearkey") # Get clearkey value
+        referer = fragments.get("referer") # Get referer value
+
     log.info(f"User Agent: '{args.ua}'")
     if args.proxy:
         log.info(f"HTTP Proxy: '{args.proxy}'")
@@ -833,7 +853,7 @@ def main():
     # If -proxybypass is supplied, check url hostname matches any bypasses
     if args.proxybypass:
         log.info(f"Proxy Bypass: '{args.proxybypass}'")
-        bypass_result = proxy_bypass_req(input_url, args.ua, args.proxybypass)
+        bypass_result = proxy_bypass_req(input_url, args.ua, referer, args.proxybypass)
         if bypass_result is None:
             log.info("Bypassing supplied proxy for stream URL: '{input_url}'")
             args.proxy = None
@@ -843,15 +863,23 @@ def main():
 
     session = Streamlink() # Start Streamlink session
 
-    # Apply the supplied user-agent string to streamlink session
-    session.set_option("http-headers", {
-        "User-Agent": args.ua
-    })
+    if referer:
+        log.info(f"Referer: '{referer}'")
+        # If referer specified, apply referer headers and supplied user-agent string to streamlink session
+        session.set_option("http-headers", {
+            "User-Agent": args.ua,
+            "Referer": referer
+        })
+    else:
+        # Apply the supplied user-agent string to streamlink session
+        session.set_option("http-headers", {
+            "User-Agent": args.ua
+        })
 
     # Apply proxy server to streamlink if supplied using -proxy parameter
     if args.proxy:
         session.set_option("http-proxy", args.proxy)
-        # set ipv4 only mode when using proxy
+        # set ipv4 only mode when using proxy (fixes reliability issues)
         session.set_option("ipv4", True)
 
     # If -subtitles flag is set (mux-subtitles is False by default)
