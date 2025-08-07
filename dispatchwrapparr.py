@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-Dispatchwrapparr - Version 0.5: A wrapper for Dispatcharr that supports the following:
+Dispatchwrapparr - Version 0.5.1: A wrapper for Dispatcharr that supports the following:
 
   - M3U8/DASH-MPD best stream selection, segment download handling and piping to ffmpeg
   - DASH-MPD DRM clearkey support
@@ -778,16 +778,18 @@ def check_url_fragments(raw_url: str):
         return base_url, None
 
 
-def detect_stream_type(session, url, user_agent=None, proxy=None):
+def detect_stream_type(session, url, useragent, referer=None, proxy=None):
     try:
         return session.streams(url)
     except NoPluginError:
         log.warning("No plugin found for URL. Attempting fallback based on MIME type...")
-
         headers = {
-            "User-Agent": user_agent or "Mozilla/5.0",
+            "User-Agent": useragent,
             "Range": "bytes=0-1023"
         }
+
+        if referer:
+            headers["Referer"] = referer
 
         proxies = {
             "http": proxy,
@@ -936,7 +938,7 @@ def main():
         session.set_option("ffmpeg-start-at-zero", True) # Start at zero for ffmpeg muxing
         # Fetch the available streams
         try:
-            streams = detect_stream_type(session, input_url, user_agent=args.ua, proxy=args.proxy) # Pass stream detection off to the detect_stream_type function
+            streams = detect_stream_type(session, input_url, useragent=args.ua, referer=referer, proxy=args.proxy) # Pass stream detection off to the detect_stream_type function
         except Exception as e:
             log.error(f"Stream setup failed: {e}")
             return
