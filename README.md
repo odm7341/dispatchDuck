@@ -11,7 +11,7 @@
 ✅ **High Performance** — Uses streamlink API's for segment dowloading which significantly improves channel start times\
 ✅ **Highly Flexible** — Can support standard HLS, Mpeg-DASH as well as DASH-DRM, Youtube, Twitch and other livestreaming services as channels\
 ✅ **Proxy Support** — Full support for passing proxy servers to bypass geo restrictions. Also support for bypassing proxy for specific URL's used in initial redirections\
-✅ **Custom Header Support** — Currenly supports the 'Referer' header by appending a `#referer=<URL>` fragment to the end of the URL\
+✅ **Custom Header Support** — Currently supports the 'Referer' and 'Origin' headers by appending `#referer=<URL>` or `#origin=<URL>` (or both) fragments to the end of the URL\
 ✅ **Extended Stream Type Detection** — Fallback option that checks MIME type of stream URL for streamlink plugin selection
 
 ---
@@ -112,9 +112,11 @@ Below is an example of a `clearkeys.json` file or an expected output from an API
 
 ## ✨ Can I use custom headers?
 
-Yes, however at this time only the additional 'Referer' header is supported.
+Yes, however at this time only 'Referer' and 'Origin' headers are supported.
 
 To use a 'Referer' header, simply append the `#referer=<URL>` fragment to the end of the strean URL.
+
+For both 'Referer' and 'Origin' headers, simply append the `#referer=<URL>&origin=<URL>` fragments together, delimited by an ampersand '&'.
 
 The `#referer=<URL>` fragment can also be used in conjunction with other fragments such as `#clearkey=<clearkey>` if needed.
 

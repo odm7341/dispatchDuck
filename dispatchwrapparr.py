@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-Dispatchwrapparr - Version 0.5.1: A wrapper for Dispatcharr that supports the following:
+Dispatchwrapparr - Version 0.5.2: A wrapper for Dispatcharr that supports the following:
 
   - M3U8/DASH-MPD best stream selection, segment download handling and piping to ffmpeg
   - DASH-MPD DRM clearkey support
@@ -653,7 +653,7 @@ def configure_logging(level="INFO") -> logging.Logger:
     log = logging.getLogger("dispatchwrapparr")
     return log
 
-def proxy_bypass_req(url: str, useragent: str, referer: str, bypasslist: str) -> str | None:
+def proxy_bypass_req(url: str, headers: str, bypasslist: str) -> str | None:
     """
     Determines what to do with supplied -proxybypass list
     - If supplied URL's hostname is not in bypass list, return the same URL and use proxy.
@@ -662,14 +662,6 @@ def proxy_bypass_req(url: str, useragent: str, referer: str, bypasslist: str) ->
     - If any other HTTP code is received, throw an error and fallback to the original URL and continue to use proxy.
     """
 
-    headers = {
-        "User-Agent": useragent
-    }
-
-    if referer:
-        headers["Referer"] = referer
-
-    proxies = {}  # no proxy: we're testing bypass
     bypass_patterns = [pattern.strip() for pattern in bypasslist.split(",")]
 
     try:
@@ -681,7 +673,7 @@ def proxy_bypass_req(url: str, useragent: str, referer: str, bypasslist: str) ->
 
         # Hostname *is* in bypass list, begin checking for redirects
         while True:
-            response = requests.get(url, headers=headers, proxies=proxies, allow_redirects=False, timeout=5)
+            response = requests.get(url, headers=headers, allow_redirects=False, timeout=5)
             status = response.status_code
             if status == 200:
                 return None  # good response, no proxy needed
@@ -778,18 +770,14 @@ def check_url_fragments(raw_url: str):
         return base_url, None
 
 
-def detect_stream_type(session, url, useragent, referer=None, proxy=None):
+def detect_stream_type(session, url, headers, proxy=None):
     try:
         return session.streams(url)
     except NoPluginError:
         log.warning("No plugin found for URL. Attempting fallback based on MIME type...")
-        headers = {
-            "User-Agent": useragent,
-            "Range": "bytes=0-1023"
-        }
 
-        if referer:
-            headers["Referer"] = referer
+        # Add a bytes range for GET so that it doesn't download too much
+        headers["Range"] = "bytes=0-1023"
 
         proxies = {
             "http": proxy,
@@ -835,27 +823,43 @@ def main():
     input_url, fragments = check_url_fragments(args.i) # Check -i (input URL) for any fragments appended to url (#whatever=thing&#someotherthing=this).
     log.info(f"Stream URL: '{input_url}'")
 
-    clearkey = None # Initialise clearkey var
-    referer = None # Initialise the referer var
+    # Initialise potential fragment vars
+    clearkey = None
+    referer = None
+    origin = None
 
     # If there are fragments, set them safely
     if fragments:
-        clearkey = fragments.get("clearkey") # Get clearkey value
-        referer = fragments.get("referer") # Get referer value
+        clearkey = fragments.get("clearkey")
+        referer = fragments.get("referer")
+        origin = fragments.get("origin")
 
-    log.info(f"User Agent: '{args.ua}'")
     if args.proxy:
         log.info(f"HTTP Proxy: '{args.proxy}'")
 
-    # Check if we already have a clearkey from the check_clearkey_in_url() function, and if not check if we can find one by url if the -clearkeys parameter is set
+    # Find clearkey if -clearkeys arg specified and one hasn't been found in fragments
     if clearkey is None and args.clearkeys:
-        # If -clearkeys argument is supplied, search for a URL match in supplied file
-        clearkey = check_clearkeys_for_url(args.i,args.clearkeys)
+        # If -clearkeys argument is supplied, search for a URL match in supplied file/url
+        clearkey = check_clearkeys_for_url(input_url,args.clearkeys)
+
+    # Begin header construction with mandatory user agent string
+    log.info(f"User Agent: '{args.ua}'")
+    headers = {
+        "User-Agent": args.ua
+    }
+
+    # Append additional headers if set
+    if referer:
+        log.info(f"Referer: '{referer}'")
+        headers["Referer"] = referer
+    if origin:
+        log.info(f"Origin: '{origin}'")
+        headers["Origin"] = origin
 
     # If -proxybypass is supplied, check url hostname matches any bypasses
     if args.proxybypass:
         log.info(f"Proxy Bypass: '{args.proxybypass}'")
-        bypass_result = proxy_bypass_req(input_url, args.ua, referer, args.proxybypass)
+        bypass_result = proxy_bypass_req(input_url, headers, args.proxybypass)
         if bypass_result is None:
             log.info("Bypassing supplied proxy for stream URL: '{input_url}'")
             args.proxy = None
@@ -863,20 +867,11 @@ def main():
             input_url = bypass_result
             log.info(f"Determined stream URL to proxy: '{input_url}'")
 
-    session = Streamlink() # Start Streamlink session
+    # Start Streamlink session
+    session = Streamlink()
 
-    if referer:
-        log.info(f"Referer: '{referer}'")
-        # If referer specified, apply referer headers and supplied user-agent string to streamlink session
-        session.set_option("http-headers", {
-            "User-Agent": args.ua,
-            "Referer": referer
-        })
-    else:
-        # Apply the supplied user-agent string to streamlink session
-        session.set_option("http-headers", {
-            "User-Agent": args.ua
-        })
+    # Set streamlink headers
+    session.set_option("http-headers", headers)
 
     # Apply proxy server to streamlink if supplied using -proxy parameter
     if args.proxy:
@@ -938,7 +933,7 @@ def main():
         session.set_option("ffmpeg-start-at-zero", True) # Start at zero for ffmpeg muxing
         # Fetch the available streams
         try:
-            streams = detect_stream_type(session, input_url, useragent=args.ua, referer=referer, proxy=args.proxy) # Pass stream detection off to the detect_stream_type function
+            streams = detect_stream_type(session, input_url, headers, proxy=args.proxy) # Pass stream detection off to the detect_stream_type function
         except Exception as e:
             log.error(f"Stream setup failed: {e}")
             return
