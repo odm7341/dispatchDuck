@@ -12,6 +12,7 @@
 ✅ **Highly Flexible** — Can support standard HLS, Mpeg-DASH as well as DASH-DRM, Youtube, Twitch and other livestreaming services as channels\
 ✅ **Proxy Support** — Full support for passing proxy servers to bypass geo restrictions. Also support for bypassing proxy for specific URL's used in initial redirections\
 ✅ **Custom Header Support** — Currently supports the 'Referer' and 'Origin' headers by appending `#referer=<URL>` or `#origin=<URL>` (or both) fragments to the end of the URL\
+✅ **Support for Radio Stations as TV Channels** — Add your favourite radio stations as TV channels by using `#novideo=true` fragment at the end of the URL or the `-novideo` argument as a custom profile\
 ✅ **Extended Stream Type Detection** — Fallback option that checks MIME type of stream URL for streamlink plugin selection
 
 ---
@@ -23,7 +24,9 @@
 - `-proxy <proxy server>`: Optional: Configure a proxy server. Supports http, https only.
 - `-proxybypass <comma-delimited hostnames>`: Optional. To be used in conjunction with `-proxy` directive. Supply a comma-delimited list of hostnames to be bypassed from supplied proxy. Wildcards supported.
 - `-clearkeys <clearkey file or url>`: Optional: Supply a json file or URL containing json URL to clearkey mappings
-- `-loglevel <loglevel>`: Optional to change the default log level of "INFO". Supported options: "CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", and "NOTSET".
+- `-novideo`: Optional: Specifies that the streams in this profile contain no video (Eg. Radio Stations). This option will mux in a blank video stream along with the audio.
+- `-noaudio`: Optional: Specified that the streams in this profile contain no audio. This option will mux in silent audio for compatibility puroposes.
+- `-loglevel <loglevel>`: Optional: to change the default log level of "INFO". Supported options: "CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", and "NOTSET".
 - `-subtitles`: Optional to enable muxing of subtitles. Disabled by default. NOTE: Subtitle support in streamlink is limited at best. May not work as intended.
 
 Example: `dispatchwrapparr.py -i {streamUrl} -ua {userAgent} [-proxy 'http://your.proxy.server:3128' -proxybypass '192.168.0.*,*.somesite.com' -clearkeys 'clearkeys.json' -loglevel 'INFO' -subtitles]`
@@ -91,9 +94,9 @@ The `#clearkey=<clearkey>` can also be used in conjunction with other fragments.
 The reason why we remove the URL from the hash settings is because if the clearkey ever has to change (many channels rotate theirs regularly), then Dispatcharr won't treat the channel as new.
 
 
-***Method 2: Use `-clearkeys` directive to supply a json file or URL containing URL to Clearkey mappings***
+***Method 2: Use `-clearkeys` argument to supply a json file or URL containing URL to Clearkey mappings***
 
-The `-clearkeys` directive can be supplied with a json formatted file or URL containing URL's which map to clearkeys, and performs this function in the following ways:
+The `-clearkeys` argument can be supplied with a json formatted file or URL containing URL's which map to clearkeys, and performs this function in the following ways:
 
 - Wildcards are supported. Eg. to match a clearkey to a specific URL, you can specify wildcards in the URL string. Eg. `https://olsp.live.dash.c4assets.com/*/live/channel(c4)/*.mpd`
 - When a URL is supplied, it will ignore the `-proxy` directive for fetching clearkeys. It assumes that a proxy is not required for this request. This allows you to create your own clearkeys API that runs locally.
@@ -121,6 +124,63 @@ For both 'Referer' and 'Origin' headers, simply append the `#referer=<URL>&origi
 The `#referer=<URL>` fragment can also be used in conjunction with other fragments such as `#clearkey=<clearkey>` if needed.
 
 If required, more custom headers could be added later. If you have a good use-case for this, please feel free to log a feature request.
+
+
+## ✨ How do I add radio streams as TV channels?
+
+Plex/Emby/Jellyfin expect video streams when TV channels are added.
+
+As a workaround, Dispatchwrapparr has the ability to mux blank video data into radio streams for compatibility purposes.
+
+There are two ways to add Radio streams as TV channels:
+
+***Method 1: Create a custom streaming profile in Dispatcharr for Radio Stations***
+
+The `-novideo` argument can be supplied to dispatchwrapparr as a custom profile for radio station streams.
+
+Using a streaming profile means that you could import manifests of radio streams from various sources and have them all treated as radio stations.
+
+***Method 2: Append `#novideo=true` to the end of the stream URL***
+
+This option works similarly to the other fragment options. In an m3u8 file, simply append a `#novideo=true` fragment to the end of the stream URL, and dispatchwrapparr will treat it as a radio station.
+
+Below is an example of a custom m3u8 manifest with Channel X from New Zealand, and the `#novideo=true` fragment appended.
+
+```channel-x.m3u8
+#EXTM3U
+#EXTINF:-1 tvg-id="Radio.Channel.X" group-title="Radio" tvg-logo="https://images.mediaworks.nz/rova/Content/apps/images/ChannelX_600x600.png",Channel X
+https://mediaworks.streamguys1.com/chx_net/playlist.m3u8#novideo=true
+```
+
+Note: This feature has only been tested on radio streams that use HLS with AAC. Results from other stream types are unknown.
+
+
+## ✨ What about Livestreams that don't have audio?
+
+Like the above, Plex/Emby/Jellyfin also tend to expect audio as part of their TV streams.
+
+Dispatchwrapparr has the ability to mux silent audio data into video streams that contain no audio for compatibility purposes.
+
+There are two ways to add these streams as TV channels:
+
+***Method 1: Append `#noaudio=true` to the end of the stream URL***
+
+In an m3u8 file, simply append a `#noaudio=true` fragment to the end of the stream URL, and dispatchwrapparr will generate dummy audio for the stream.
+
+Below is an example of a custom m3u8 manifest with the SEN 4K Livestream from the International Space Station with multiple fragments including `#noaudio=true` appended.
+
+```sen-iss.m3u8
+#EXTM3U
+#EXTINF:-1 tvg-id="ISS.SEN.4K" group-title="Miscellaneous" tvg-logo="https://about.sen.com/wp-content/uploads/2024/07/Sen_Logo_XL_RGB_White_Bitmap.png",SEN ISS (Raw 4K)
+https://spacetv.sen.com/out/v1/058d27c98eb543c987d75d60085b61c7/index/index.m3u8#referer=https://www.sen.com/&origin=https://www.sen.com/&noaudio=true
+```
+
+***Method 2: Create a custom streaming profile in Dispatcharr for Video-Only Streams***
+
+The `-noaudio` argument can be supplied to dispatchwrapparr as a custom profile for video-only streams.
+
+This would potentially only be useful if you have a lot of these stream types that you wish to add as TV channels.
+
 
 ## ❤️ Shoutouts
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-Dispatchwrapparr - Version 0.5.2: A wrapper for Dispatcharr that supports the following:
+Dispatchwrapparr - Version 0.5.3: A wrapper for Dispatcharr that supports the following:
 
   - M3U8/DASH-MPD best stream selection, segment download handling and piping to ffmpeg
   - DASH-MPD DRM clearkey support
@@ -28,6 +28,7 @@ import socket
 import ipaddress
 import fnmatch
 import json
+import subprocess
 from urllib.parse import urlparse, parse_qs
 
 from collections import defaultdict
@@ -42,21 +43,13 @@ from streamlink.plugin.plugin import HIGH_PRIORITY, parse_params, stream_weight
 from streamlink.stream.dash import DASHStream, DASHStreamWorker, DASHStreamWriter, DASHStreamReader
 from streamlink.stream.dash.manifest import MPD, Representation
 from streamlink.stream.ffmpegmux import FFMPEGMuxer
-from streamlink.stream import HTTPStream, HLSStream, DASHStream
+from streamlink.stream import HTTPStream, HLSStream, DASHStream, MuxedStream, Stream
 from streamlink.utils.url import update_scheme
 from streamlink.session import Streamlink
 from streamlink.utils.l10n import Language, Localization
 from streamlink.utils.times import now
 
-# Global variables
 log = logging.getLogger("dispatchwrapparr")
-
-
-"""
-Begin DASH DRM Plugin
-Code adapted from streamlink-plugin-dashdrm by titus-au: https://github.com/titus-au/streamlink-plugin-dashdrm
-A special thanks!
-"""
 
 DASHDRM_OPTIONS = [
     "decryption-key",
@@ -505,8 +498,6 @@ class DASHStreamDRM(DASHStream):
 
             if vid:
                 stream_name.append(f"{vid.height or vid.bandwidth_rounded:0.0f}{'p' if vid.height else 'k'}")
-            #if aud and len(audio) > 1:
-            #    stream_name.append(f"a{aud.bandwidth:0.0f}k")
             ret.append(("+".join(stream_name), stream))
 
         # rename duplicate streams
@@ -517,8 +508,6 @@ class DASHStreamDRM(DASHStream):
         def sortby_bandwidth(dash_stream: DASHStreamDRM) -> float:
             if dash_stream.video_representation:
                 return dash_stream.video_representation.bandwidth
-            #if dash_stream.audio_representation:
-            #    return dash_stream.audio_representation.bandwidth
             return 0  # pragma: no cover
 
         ret_new = {}
@@ -561,10 +550,6 @@ class DASHStreamDRM(DASHStream):
             video.open()
             fds.append(video)
 
-        #if rep_audio:
-        #    audio = DASHStreamReaderDRM(self, rep_audio, timestamp)
-        #    log.debug(f"Opening DASH reader for: {rep_audio.ident!r} - {rep_audio.mimeType}")
-
         next_map = 1
         if rep_audios:
             for i, rep_audio in enumerate(rep_audios):
@@ -581,8 +566,6 @@ class DASHStreamDRM(DASHStream):
         # only do subtitles if we have video
         if rep_subtitles and rep_subtitles[0] and rep_video:
             for _, rep_subtitle in enumerate(rep_subtitles):
-                #if not rep_subtitle:
-                    #break
                 subtitle = DASHStreamReaderSUB(self, rep_subtitle, timestamp)
                 log.debug(f"Opening DASH reader for: {rep_subtitle.ident!r} - {rep_subtitle.mimeType}")
                 subtitle.open()
@@ -597,11 +580,6 @@ class DASHStreamDRM(DASHStream):
         elif audio:
             return audio1
 
-"""
-End of DASHDRM Plugin Section
-Beginning of Dispatchwrapparr Section
-"""
-
 def parse_args():
     # Initial wrapper arguments
     parser = argparse.ArgumentParser(description="Dispatchwrapparr: A wrapper for Dispatcharr")
@@ -611,12 +589,18 @@ def parse_args():
     parser.add_argument("-proxybypass", help="Comma-separated list of hostnames or IP patterns to bypass the proxy (e.g. '192.168.*.*,*.lan')")
     parser.add_argument("-clearkeys", help="Optional Supply a json file or URL containing URL/Clearkey maps (e.g. 'clearkeys.json' or 'https://some.host/clearkeys.json')")
     parser.add_argument("-subtitles", action="store_true", help="Enable support for subtitles (if available)")
+    parser.add_argument("-novideo", action="store_true", help="Specifies the input stream is audio only (useful for using radio stations as TV channels)")
+    parser.add_argument("-noaudio", action="store_true", help="Muxes in silent audio into video-only streams to assist with player compatibility")
     parser.add_argument("-loglevel", type=str, default="INFO", choices=["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET"], help="Enable logging and set log level. (default: INFO)")
     args = parser.parse_args()
 
     # Enforce dependency for proxybypass, must be used with proxy (duh!!)
     if args.proxybypass and not args.proxy:
-        parser.error("argument -proxybypass: requires -proxy to be set")
+        parser.error("Argument -proxybypass: requires -proxy to be set")
+
+    # Ensure that novideo and noaudio are not specified simultaneously
+    if args.novideo and args.noaudio:
+        parser.error("Arguments -novideo and -noaudio cannot be used simultaneously")
 
     return args
 
@@ -769,7 +753,6 @@ def check_url_fragments(raw_url: str):
     else:
         return base_url, None
 
-
 def detect_stream_type(session, url, headers, proxy=None):
     try:
         return session.streams(url)
@@ -812,6 +795,64 @@ def detect_stream_type(session, url, headers, proxy=None):
         log.error(f"Plugin failed: {e}")
         raise
 
+def create_silent_audio(session) -> Stream:
+    """
+    Return a Streamlink-compatible Stream that produces continuous silent AAC audio.
+    Uses ffmpeg with anullsrc.
+    """
+    cmd = [
+        "ffmpeg",
+        "-f", "lavfi",
+        "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
+        "-c:a", "aac",
+        "-f", "adts",
+        "pipe:1"
+    ]
+    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+
+    class SilentAudioStream(Stream):
+        def open(self, *args, **kwargs):
+            return process.stdout
+
+        def close(self):
+            if process.poll() is None:
+                process.kill()
+
+    return SilentAudioStream(session)
+
+def create_blank_video(session, resolution="320x180", fps=25, codec="libx264", bitrate="100k") -> Stream:
+    """
+    Create a Streamlink-compatible Stream that produces a blank video.
+    Useful for muxing with audio-only streams.
+
+    Args:
+        session: Streamlink session instance
+        resolution: Video resolution (default 320x180)
+        fps: Frames per second (default 25)
+        codec: Video codec (default libx264)
+        bitrate: Target video bitrate (default 100k)
+    """
+    cmd = [
+        "ffmpeg",
+        "-f", "lavfi",
+        "-i", f"color=size={resolution}:rate={fps}:color=black",
+        "-c:v", codec,
+        "-b:v", bitrate,
+        "-f", "mpegts",
+        "pipe:1"
+    ]
+    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+
+    class BlankVideoStream(Stream):
+        def open(self, *args, **kwargs):
+            return process.stdout
+
+        def close(self):
+            if process.poll() is None:
+                process.kill()
+
+    return BlankVideoStream(session)
+
 def main():
     global log # allow assignment to the module-level variable
 
@@ -827,12 +868,17 @@ def main():
     clearkey = None
     referer = None
     origin = None
+    noaudio = None
+    novideo = None
 
     # If there are fragments, set them safely
     if fragments:
         clearkey = fragments.get("clearkey")
         referer = fragments.get("referer")
         origin = fragments.get("origin")
+        # Set noaudio and novideo vars to True if fragments are true, else None
+        noaudio = (fragments["noaudio"].lower() == "true") if "noaudio" in fragments else None
+        novideo = (fragments["novideo"].lower() == "true") if "novideo" in fragments else None
 
     if args.proxy:
         log.info(f"HTTP Proxy: '{args.proxy}'")
@@ -841,6 +887,12 @@ def main():
     if clearkey is None and args.clearkeys:
         # If -clearkeys argument is supplied, search for a URL match in supplied file/url
         clearkey = check_clearkeys_for_url(input_url,args.clearkeys)
+
+    # Check if novideo or noaudio are found in URL fragments, if not see if argument is supplied
+    if noaudio is None and args.noaudio:
+        noaudio = args.noaudio
+    if novideo is None and args.novideo:
+        novideo = args.novideo
 
     # Begin header construction with mandatory user agent string
     log.info(f"User Agent: '{args.ua}'")
@@ -950,7 +1002,23 @@ def main():
         log.error("No streams available.")
         return
 
-    # Open stream and pipe to stdout
+    # Check for noaudio and novideo bools
+    if noaudio and not novideo:
+        # noaudio selected, create dummy audio for muxing
+        log.info("No Audio: Muxing silent audio into supplied video stream")
+        audio_stream = create_silent_audio(session)
+        video_stream = stream
+        stream = MuxedStream(session, video_stream, audio_stream, codec_audio="aac")
+
+    elif not noaudio and novideo:
+        log.info("No Video: Muxing blank video into supplied audio stream")
+        # novideo specified, not implemented yet
+        audio_stream = stream
+        video_stream = create_blank_video(session)
+        stream = MuxedStream(session, video_stream, audio_stream)
+
+    elif noaudio and novideo:
+        log.warning("Both 'noaudio' and 'novideo' specified. Ignoring!")
 
     try:
         log.info("Starting stream.")
