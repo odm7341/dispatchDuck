@@ -1004,7 +1004,6 @@ def main():
 
     # Check for noaudio and novideo bools
     if noaudio and not novideo:
-        # noaudio selected, create dummy audio for muxing
         log.info("No Audio: Muxing silent audio into supplied video stream")
         audio_stream = create_silent_audio(session)
         video_stream = stream
@@ -1012,13 +1011,12 @@ def main():
 
     elif not noaudio and novideo:
         log.info("No Video: Muxing blank video into supplied audio stream")
-        # novideo specified, not implemented yet
         audio_stream = stream
         video_stream = create_blank_video(session)
         stream = MuxedStream(session, video_stream, audio_stream)
 
     elif noaudio and novideo:
-        log.warning("Both 'noaudio' and 'novideo' specified. Ignoring!")
+        log.warning("Both 'noaudio' and 'novideo' specified. Ignoring both.")
 
     try:
         log.info("Starting stream.")
