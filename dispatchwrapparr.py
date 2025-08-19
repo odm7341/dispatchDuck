@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 
 """
-Dispatchwrapparr - Version 0.5.3: A wrapper for Dispatcharr that supports the following:
+Dispatchwrapparr - Version 0.5.4: A wrapper for Dispatcharr that supports the following:
 
   - M3U8/DASH-MPD best stream selection, segment download handling and piping to ffmpeg
   - DASH-MPD DRM clearkey support
   - HTTP Proxy Support
   - Support for Youtube Livestreams and many others
   - Extended MIME-type stream detection for Streamlink
+  - Supports radio station streams as TV channels
+  - Adds support for streams with no audio as TV channels
 
 Usage: dispatchwrapper.py -i <URL> -ua <User Agent String>
-Optional: -proxy <proxy server> -proxybypass <proxy bypass list> -clearkeys <file/url> -loglevel <level> -subtitles
+Optional: -proxy <proxy server> -proxybypass <proxy bypass list> -clearkeys <file/url> -loglevel <level> -subtitles -novideo -noaudio
 """
 
 from __future__ import annotations
@@ -785,7 +787,7 @@ def detect_stream_type(session, url, headers, proxy=None):
             return HLSStream.parse_variant_playlist(session, url)
         elif "dash+xml" in content_type:
             return DASHStream.parse_manifest(session, url)
-        elif "video/mp2t" in content_type or "application/octet-stream" in content_type:
+        elif "video/mp2t" in content_type or "application/octet-stream" in content_type or "audio/mpeg" in content_type:
             return {"live": HTTPStream(session, url)}
         else:
             log.error("Unrecognized Content-Type for fallback")
