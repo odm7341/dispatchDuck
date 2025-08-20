@@ -12,8 +12,8 @@
 ✅ **Highly Flexible** — Can support standard HLS, Mpeg-DASH as well as DASH-DRM, Youtube, Twitch and other livestreaming services as channels\
 ✅ **Proxy Support** — Full support for passing proxy servers to bypass geo restrictions. Also support for bypassing proxy for specific URL's used in initial redirections\
 ✅ **Custom Header Support** — Currently supports the 'Referer' and 'Origin' headers by appending `#referer=<URL>` or `#origin=<URL>` (or both) fragments to the end of the URL\
-✅ **Support for Radio Stations as TV Channels** — Add your favourite radio stations as TV channels by using `#novideo=true` fragment at the end of the URL or the `-novideo` argument as a custom profile\
 ✅ **Extended Stream Type Detection** — Fallback option that checks MIME type of stream URL for streamlink plugin selection
+✅ **Automated Stream Variant Detection** — Detects streams with no video or no audio and muxes in the missing components for compatibility with most players
 
 ---
 
@@ -23,9 +23,10 @@
 - `-ua`: Required user agent string
 - `-proxy <proxy server>`: Optional: Configure a proxy server. Supports http, https only.
 - `-proxybypass <comma-delimited hostnames>`: Optional. To be used in conjunction with `-proxy` directive. Supply a comma-delimited list of hostnames to be bypassed from supplied proxy. Wildcards supported.
-- `-clearkeys <clearkey file or url>`: Optional: Supply a json file or URL containing json URL to clearkey mappings
-- `-novideo`: Optional: Specifies that the streams in this profile contain no video (Eg. Radio Stations). This option will mux in a blank video stream along with the audio.
-- `-noaudio`: Optional: Specified that the streams in this profile contain no audio. This option will mux in silent audio for compatibility puroposes.
+- `-clearkeys <clearkey file or url>`: Optional: Supply a json file or URL containing json URL to clearkey mappings.
+- `-novariantcheck`: Optional: Skips checks for streams containing video or audio only. Will not force muxing of missing audio or video. Cannot be used with -novideo or -noaudio arguments.
+- `-novideo`: Optional: Designates the stream as containing no video. Forces muxing of blank video into the stream if it is not detected during variant checking automatically.
+- `-noaudio`: Optional: Designates the stream as containing no audio. Forces muxing of silent audio into the stream if it is not detected during variant checking automatically.
 - `-loglevel <loglevel>`: Optional: to change the default log level of "INFO". Supported options: "CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", and "NOTSET".
 - `-subtitles`: Optional to enable muxing of subtitles. Disabled by default. NOTE: Subtitle support in streamlink is limited at best. May not work as intended.
 
@@ -126,15 +127,21 @@ The `#referer=<URL>` fragment can also be used in conjunction with other fragmen
 If required, more custom headers could be added later. If you have a good use-case for this, please feel free to log a feature request.
 
 
-## ✨ How do I add radio streams as TV channels?
+## ✨ Automated Stream Variant Detection
 
-Plex/Emby/Jellyfin expect video streams when TV channels are added.
+Plex/Emby/Jellyfin expects to receive both video and audio in any streams that it plays. If a stream contains one without the other, they generally won't play.
 
-As a workaround, Dispatchwrapparr has the ability to mux blank video data into radio streams for compatibility purposes.
+Dispatchwrapparr will attempt to autodetect if a stream contains only audio, or only video as part of its stream variant checking.
 
-There are two ways to add Radio streams as TV channels:
+To disable auto-detection of audio-only and video-only streams, the `-novariantcheck` flag may be used in a custom profile or the `#novariantcheck=true` url fragment.
 
-***Method 1: Create a custom streaming profile in Dispatcharr for Radio Stations***
+### Audio-only streams (Eg. Streaming Radio)
+
+If the stream is detected to have only audio, then dispatchwrapparr will mux blank video data into the stream so that it can be played.
+
+If autodetection does not work as expected, there are two methods by which you can force the muxing of blank video into the stream.
+
+***Method 1: Use the `-novideo` argument in a custom profile***
 
 The `-novideo` argument can be supplied to dispatchwrapparr as a custom profile for radio station streams.
 
@@ -152,18 +159,13 @@ Below is an example of a custom m3u8 manifest with Channel X from New Zealand, a
 https://mediaworks.streamguys1.com/chx_net/playlist.m3u8#novideo=true
 ```
 
-Note: This feature has only been tested on radio streams that use HLS with AAC. Results from other stream types are unknown.
+### Video-only streams (Eg. Live Cameras)
 
+If the stream is detected to have only video, then dispatchwrapparr will mux silent audio into the stream so that it can be played.
 
-## ✨ What about Livestreams that don't have audio?
+If autodetection does not work as expected, there are two methods by which you can force the muxing of silent audio into the stream.
 
-Like the above, Plex/Emby/Jellyfin also tend to expect audio as part of their TV streams.
-
-Dispatchwrapparr has the ability to mux silent audio data into video streams that contain no audio for compatibility purposes.
-
-There are two ways to add these streams as TV channels:
-
-***Method 1: Append `#noaudio=true` to the end of the stream URL***
+***Method 1: Append `#noaudio=true` fragment to the stream URL***
 
 In an m3u8 file, simply append a `#noaudio=true` fragment to the end of the stream URL, and dispatchwrapparr will generate dummy audio for the stream.
 
@@ -179,7 +181,7 @@ https://spacetv.sen.com/out/v1/058d27c98eb543c987d75d60085b61c7/index/index.m3u8
 
 The `-noaudio` argument can be supplied to dispatchwrapparr as a custom profile for video-only streams.
 
-This would potentially only be useful if you have a lot of these stream types that you wish to add as TV channels.
+Note: Using the novideo and noaudio arguments either as a fragment or a cli argument will disable the stream variant detection.
 
 
 ## ❤️ Shoutouts

@@ -3,16 +3,8 @@
 """
 Dispatchwrapparr - Version 0.5.4: A wrapper for Dispatcharr that supports the following:
 
-  - M3U8/DASH-MPD best stream selection, segment download handling and piping to ffmpeg
-  - DASH-MPD DRM clearkey support
-  - HTTP Proxy Support
-  - Support for Youtube Livestreams and many others
-  - Extended MIME-type stream detection for Streamlink
-  - Supports radio station streams as TV channels
-  - Adds support for streams with no audio as TV channels
-
 Usage: dispatchwrapper.py -i <URL> -ua <User Agent String>
-Optional: -proxy <proxy server> -proxybypass <proxy bypass list> -clearkeys <file/url> -loglevel <level> -subtitles -novideo -noaudio
+Optional: -proxy <proxy server> -proxybypass <proxy bypass list> -clearkeys <file/url> -loglevel <level> -subtitles -novariantcheck -novideo -noaudio
 """
 
 from __future__ import annotations
@@ -34,7 +26,7 @@ import subprocess
 from urllib.parse import urlparse, parse_qs
 
 from collections import defaultdict
-from contextlib import suppress
+from contextlib import suppress, closing
 from typing import List, Self, Tuple, Optional
 from datetime import timedelta
 
@@ -591,8 +583,9 @@ def parse_args():
     parser.add_argument("-proxybypass", help="Comma-separated list of hostnames or IP patterns to bypass the proxy (e.g. '192.168.*.*,*.lan')")
     parser.add_argument("-clearkeys", help="Optional Supply a json file or URL containing URL/Clearkey maps (e.g. 'clearkeys.json' or 'https://some.host/clearkeys.json')")
     parser.add_argument("-subtitles", action="store_true", help="Enable support for subtitles (if available)")
-    parser.add_argument("-novideo", action="store_true", help="Specifies the input stream is audio only (useful for using radio stations as TV channels)")
-    parser.add_argument("-noaudio", action="store_true", help="Muxes in silent audio into video-only streams to assist with player compatibility")
+    parser.add_argument("-novariantcheck", action="store_true", help="Do not autodetect if stream is audio-only or video-only")
+    parser.add_argument("-novideo", action="store_true", help="Forces muxing of a blank video track into a stream that contains no audio")
+    parser.add_argument("-noaudio", action="store_true", help="Forces muxing of a silent audio track into a stream that contains no video")
     parser.add_argument("-loglevel", type=str, default="INFO", choices=["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET"], help="Enable logging and set log level. (default: INFO)")
     args = parser.parse_args()
 
@@ -600,9 +593,10 @@ def parse_args():
     if args.proxybypass and not args.proxy:
         parser.error("Argument -proxybypass: requires -proxy to be set")
 
-    # Ensure that novideo and noaudio are not specified simultaneously
-    if args.novideo and args.noaudio:
-        parser.error("Arguments -novideo and -noaudio cannot be used simultaneously")
+    # Ensure that novariantcheck, novideo, and noaudio are not specified simultaneously
+    flags = [args.novideo, args.noaudio, args.novariantcheck]
+    if sum(bool(f) for f in flags) > 1:
+        parser.error("Arguments -novariantcheck, -novideo and -noaudio can only be used individually")
 
     return args
 
@@ -756,6 +750,12 @@ def check_url_fragments(raw_url: str):
         return base_url, None
 
 def detect_stream_type(session, url, headers, proxy=None):
+    """
+    Tries to pass the URL directly to Streamlink, and if it cannot determine the stream type
+    it makes a request to discover the MIME type and selects the appropriate stream type.
+
+    Returns a dict of streams
+    """
     try:
         return session.streams(url)
     except NoPluginError:
@@ -855,6 +855,75 @@ def create_blank_video(session, resolution="320x180", fps=25, codec="libx264", b
 
     return BlankVideoStream(session)
 
+
+def check_stream_variant(stream, session=None):
+    """ Checks for different stream variants:
+    Eg. Audio Only streams or Video streams with no audio
+    Can be disabled by using the -nocheckvariant argument
+
+    Returns integer:
+    0 = Normal Audio/Video
+    1 = Audio Only Stream (Radio streams)
+    2 = Video Only Stream (Cameras or other livestreams with no audio)
+    """
+
+    # HLSStream case
+    if isinstance(stream, HLSStream) and getattr(stream, "multivariant", None):
+        log.debug("HLSStream Selected")
+        # Find the playlist attributes by "best" selected url
+        selected_playlist = None
+        for playlist in stream.multivariant.playlists:
+            if playlist.uri == stream.url:
+                selected_playlist = playlist
+                break
+
+        if selected_playlist:
+            codecs = selected_playlist.stream_info.codecs or []
+            log.debug(f"Stream Codecs: {codecs}")
+            # Check for audio/video presence
+            has_video = any(c.startswith(("avc", "hev", "vp")) for c in codecs)
+            has_audio = any(c.startswith(("mp4a", "aac")) for c in codecs)
+
+            if has_audio and not has_video:
+                log.debug("Detected Audio Only Stream")
+                return 1
+            elif has_video and not has_audio:
+                log.debug("Detected Video Only Stream")
+                return 2
+            else:
+                log.debug("Detected Audio+Video Stream")
+                return 0
+
+    # HTTPStream case
+    if isinstance(stream, HTTPStream):
+        log.debug("HTTPStream Selected")
+        # Fast path: detect audio-only by extension
+        url = stream.url.lower()
+        if url.endswith((".aac", ".m4a", ".mp3", ".ogg")):
+            log.debug(f"Detected Audio Only Stream by Extension: {url.endswith}")
+            return 1
+        if url.endswith((".mp4", ".mkv", ".webm", ".mov")):
+            log.debug(f"Detected Video+Audio Stream by Extension: {url.endswith}")
+            return 0
+        # Safe path: check Content-Type via GET (stream=True) if session provided
+        if session:
+            try:
+                with closing(session.http.get(stream.url, stream=True, timeout=5)) as r:
+                    ctype = r.headers.get("Content-Type", "").lower()
+                    if ctype.startswith("audio/"):
+                        log.debug(f"Detected Audio Only Stream by Content-Type: {ctype}")
+                        return 1
+                    if ctype.startswith("video/"):
+                        log.debug(f"Detected Video+Audio Stream by Content-Type: {ctype}")
+                        return 0
+            except Exception:
+                # Ignore errors (405, timeout, etc.)
+                return 0
+        return 0
+
+    # Default/fallback
+    return 0
+
 def main():
     global log # allow assignment to the module-level variable
 
@@ -870,6 +939,7 @@ def main():
     clearkey = None
     referer = None
     origin = None
+    novariantcheck = None
     noaudio = None
     novideo = None
 
@@ -878,7 +948,8 @@ def main():
         clearkey = fragments.get("clearkey")
         referer = fragments.get("referer")
         origin = fragments.get("origin")
-        # Set noaudio and novideo vars to True if fragments are true, else None
+        # Set novariantcheck, noaudio and novideo vars to True if fragments are true, else None
+        novariantcheck = (fragments["novariantcheck"].lower() == "true") if "novariantcheck" in fragments else None
         noaudio = (fragments["noaudio"].lower() == "true") if "noaudio" in fragments else None
         novideo = (fragments["novideo"].lower() == "true") if "novideo" in fragments else None
 
@@ -891,10 +962,14 @@ def main():
         clearkey = check_clearkeys_for_url(input_url,args.clearkeys)
 
     # Check if novideo or noaudio are found in URL fragments, if not see if argument is supplied
+    # The desired behaviour is that url fragments override any cli arguments
+    if novariantcheck is None and args.novariantcheck:
+        novariantcheck = args.novariantcheck
     if noaudio is None and args.noaudio:
         noaudio = args.noaudio
     if novideo is None and args.novideo:
         novideo = args.novideo
+
 
     # Begin header construction with mandatory user agent string
     log.info(f"User Agent: '{args.ua}'")
@@ -992,6 +1067,7 @@ def main():
             log.error(f"Stream setup failed: {e}")
             return
 
+    # No streams found, log and error and exit
     if not streams:
         log.error("No playable streams found.")
         return
@@ -1000,16 +1076,30 @@ def main():
     log.info("Selecting best available stream.")
     stream = streams.get("best") or streams.get("live") or next(iter(streams.values()), None)
 
+    # Stream not available, log error and exit
     if not stream:
         log.error("No streams available.")
         return
 
-    # Check for noaudio and novideo bools
+    # Do a variant check only if novideo and noaudio are None, or novariantcheck is True
+    if novideo is None and noaudio is None and novariantcheck is None:
+        # Attempt to detect stream variant automatically (Eg. Video Only or Audio Only)
+        log.debug("Attempting to check stream variant")
+        variant = check_stream_variant(stream,session)
+        if variant == 1:
+            log.info("Stream detected as audio only/no video")
+            novideo = True
+        if variant == 2:
+            log.info("Stream detected as video only/no audio")
+            noaudio = True
+    else:
+        log.info("Skipping stream variant check")
+
     if noaudio and not novideo:
         log.info("No Audio: Muxing silent audio into supplied video stream")
         audio_stream = create_silent_audio(session)
         video_stream = stream
-        stream = MuxedStream(session, video_stream, audio_stream, codec_audio="aac")
+        stream = MuxedStream(session, video_stream, audio_stream)
 
     elif not noaudio and novideo:
         log.info("No Video: Muxing blank video into supplied audio stream")
