@@ -635,12 +635,12 @@ def configure_logging(level="INFO") -> logging.Logger:
     log = logging.getLogger("dispatchwrapparr")
     return log
 
-def proxy_bypass_req(url: str, headers: str, bypasslist: str) -> str | None:
+def proxy_bypass_req(url: str, headers: dict, cookies: dict, bypasslist: str) -> str | None:
     """
     Determines what to do with supplied -proxybypass list
     - If supplied URL's hostname is not in bypass list, return the same URL and use proxy.
     - If '200' OK received, return 'None'. Main function will remove the proxy server for the given URL for processing.
-    - If '301' or '302' redirector occurs, follow redirects until proxy bypass list not longer matches hostname, then return the new URL.
+    - If '301' or '302' redirector occurs, follow redirects until proxy bypass list no longer matches hostname, then return the new URL.
     - If any other HTTP code is received, throw an error and fallback to the original URL and continue to use proxy.
     """
 
@@ -655,8 +655,9 @@ def proxy_bypass_req(url: str, headers: str, bypasslist: str) -> str | None:
 
         # Hostname *is* in bypass list, begin checking for redirects
         while True:
-            response = requests.get(url, headers=headers, allow_redirects=False, timeout=5)
+            response = requests.get(url, headers=headers, cookies=cookies, allow_redirects=False, timeout=5)
             status = response.status_code
+
             if status == 200:
                 return None  # good response, no proxy needed
             elif status in (301, 302):
@@ -751,7 +752,7 @@ def check_url_fragments(raw_url: str):
     else:
         return base_url, None
 
-def detect_stream_type(session, url, headers, proxy=None):
+def detect_stream_type(session, url, headers, proxy=None, cookies=None):
     """
     Tries to pass the URL directly to Streamlink, and if it cannot determine the stream type
     it makes a request to discover the MIME type and selects the appropriate stream type.
@@ -775,6 +776,7 @@ def detect_stream_type(session, url, headers, proxy=None):
             response = requests.get(
                 url,
                 headers=headers,
+                cookies=cookies,
                 proxies=proxies,
                 stream=True,
                 timeout=5
@@ -926,10 +928,12 @@ def check_stream_variant(stream, session=None):
     # Default/fallback
     return 0
 
-def load_cookies(cookiejar_path, url):
+def load_cookies(cookiejar_path: str):
     """
-    Load a Netscape/Mozilla cookies.txt file and return only the cookies
-    that match the given URL's domain/path as a dict.
+    Load all cookies from a Netscape/Mozilla cookies.txt file
+    and return:
+      - cookies_dict: dict suitable for Streamlink or manual headers
+      - cookies_requests: RequestsCookieJar for requests.Session
     """
 
     def resolve_path(path: str) -> str:
@@ -945,25 +949,18 @@ def load_cookies(cookiejar_path, url):
     try:
         jar.load(ignore_discard=True, ignore_expires=True)
     except FileNotFoundError:
-        raise FileNotFoundError(f"Cookie file not found: {resolved_file}")
+        raise FileNotFoundError(f"Cookie file not found: {cookiejar_path}")
     except Exception as e:
-        raise RuntimeError(f"Failed to load cookies from {resolved_file}: {e}")
+        raise RuntimeError(f"Failed to load cookies from {cookiejar_path}: {e}")
 
-    # Parse target URL
-    parsed = urlparse(url)
-    domain = parsed.hostname
-    path = parsed.path or "/"
-
-    # Filter cookies by domain/path
+    # Build dict and RequestsCookieJar
     cookies_dict = {}
+    cookies_requests = requests.cookies.RequestsCookieJar()
     for c in jar:
-        # Domain match (handle leading dot for subdomains)
-        if (c.domain.startswith(".") and domain.endswith(c.domain.lstrip("."))) or (c.domain == domain):
-            # Path match
-            if path.startswith(c.path):
-                cookies_dict[c.name] = c.value
+        cookies_dict[c.name] = c.value
+        cookies_requests.set(c.name, c.value, domain=c.domain, path=c.path, secure=c.secure, expires=c.expires)
 
-    return cookies_dict
+    return cookies_dict, cookies_requests
 
 def main():
     global log # allow assignment to the module-level variable
@@ -981,6 +978,8 @@ def main():
     referer = None
     origin = None
     cookies = None
+    cookies_requests = None
+    cookies_dict = None
     novariantcheck = None
     noaudio = None
     novideo = None
@@ -1026,31 +1025,28 @@ def main():
         log.info(f"Origin: '{origin}'")
         headers["Origin"] = origin
 
-    # Load cookies for initial input_url
     if args.cookies:
-        log.info(f"Cookie Jar: '{args.cookies}'")
-        cookie_dict = load_cookies(args.cookies, input_url)
-        cookie_header = "; ".join(f"{k}={v}" for k, v in cookie_dict.items())
-        headers["Cookie"] = cookie_header
+        # load cookies and create cookies_dict for streamlink, and cookies_requests for using with requests lib
+        log.info(f"Cookies: Loading cookies from file '{args.cookies}'")
+        cookies_dict,cookies_requests = load_cookies(args.cookies)
 
     # If -proxybypass is supplied, check url hostname matches any bypasses
     if args.proxybypass:
         log.info(f"Proxy Bypass: '{args.proxybypass}'")
-        bypass_result = proxy_bypass_req(input_url, headers, args.proxybypass)
+        bypass_result = proxy_bypass_req(input_url, headers, cookies_requests, args.proxybypass)
         if bypass_result is None:
-            log.info("Bypassing supplied proxy for stream URL: '{input_url}'")
+            log.info(f"Bypassing supplied proxy for stream URL: '{input_url}'")
             args.proxy = None
         else:
             input_url = bypass_result
             log.debug(f"Determined stream URL to proxy: '{input_url}'")
-            if args.cookies:
-                # input_url has changed, reload cookies for new domain
-                cookie_dict = load_cookies(args.cookies, input_url)
-                cookie_header = "; ".join(f"{k}={v}" for k, v in cookie_dict.items())
-                headers["Cookie"] = cookie_header
 
     # Start Streamlink session
     session = Streamlink()
+
+    # Set cookies if enabled
+    if args.cookies:
+        session.set_option("http-cookies", cookies_dict)
 
     # Set streamlink headers
     log.debug(f"Headers: {headers}")
@@ -1116,7 +1112,7 @@ def main():
         session.set_option("ffmpeg-start-at-zero", True) # Start at zero for ffmpeg muxing
         # Fetch the available streams
         try:
-            streams = detect_stream_type(session, input_url, headers, proxy=args.proxy) # Pass stream detection off to the detect_stream_type function
+            streams = detect_stream_type(session, input_url, headers, proxy=args.proxy, cookies=cookies_requests) # Pass stream detection off to the detect_stream_type function
         except Exception as e:
             log.error(f"Stream setup failed: {e}")
             return
