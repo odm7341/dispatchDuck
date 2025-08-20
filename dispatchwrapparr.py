@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
 """
-Dispatchwrapparr - Version 0.5.4: A wrapper for Dispatcharr that supports the following:
+Dispatchwrapparr - Version 1.0: A super wrapper for Dispatcharr
 
 Usage: dispatchwrapper.py -i <URL> -ua <User Agent String>
-Optional: -proxy <proxy server> -proxybypass <proxy bypass list> -clearkeys <file/url> -loglevel <level> -subtitles -novariantcheck -novideo -noaudio
+Optional: -proxy <proxy server> -proxybypass <proxy bypass list> -clearkeys <json file/url> -cookies <txt file> -loglevel <level> -subtitles -novariantcheck -novideo -noaudio
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ import ipaddress
 import fnmatch
 import json
 import subprocess
+import http.cookiejar
 from urllib.parse import urlparse, parse_qs
 
 from collections import defaultdict
@@ -579,13 +580,14 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Dispatchwrapparr: A wrapper for Dispatcharr")
     parser.add_argument("-i", required=True, help="Input URL")
     parser.add_argument("-ua", required=True, help="User-Agent string")
-    parser.add_argument("-proxy", help="Optional HTTP proxy (e.g. http://127.0.0.1:8888)")
-    parser.add_argument("-proxybypass", help="Comma-separated list of hostnames or IP patterns to bypass the proxy (e.g. '192.168.*.*,*.lan')")
-    parser.add_argument("-clearkeys", help="Optional Supply a json file or URL containing URL/Clearkey maps (e.g. 'clearkeys.json' or 'https://some.host/clearkeys.json')")
-    parser.add_argument("-subtitles", action="store_true", help="Enable support for subtitles (if available)")
-    parser.add_argument("-novariantcheck", action="store_true", help="Do not autodetect if stream is audio-only or video-only")
-    parser.add_argument("-novideo", action="store_true", help="Forces muxing of a blank video track into a stream that contains no audio")
-    parser.add_argument("-noaudio", action="store_true", help="Forces muxing of a silent audio track into a stream that contains no video")
+    parser.add_argument("-proxy", help="Optional: HTTP proxy server (e.g. http://127.0.0.1:8888)")
+    parser.add_argument("-proxybypass", help="Optional: Comma-separated list of hostnames or IP patterns to bypass the proxy (e.g. '192.168.*.*,*.lan')")
+    parser.add_argument("-clearkeys", help="Optional: Supply a json file or URL containing URL/Clearkey maps (e.g. 'clearkeys.json' or 'https://some.host/clearkeys.json')")
+    parser.add_argument("-cookies", help="Optional: Supply a cookie jar txt file in Mozilla/Netscape format (e.g. 'cookies.txt')")
+    parser.add_argument("-subtitles", action="store_true", help="Optional: Enable support for subtitles (if available)")
+    parser.add_argument("-novariantcheck", action="store_true", help="Optional: Do not autodetect if stream is audio-only or video-only")
+    parser.add_argument("-novideo", action="store_true", help="Optional: Forces muxing of a blank video track into a stream that contains no audio")
+    parser.add_argument("-noaudio", action="store_true", help="Optional: Forces muxing of a silent audio track into a stream that contains no video")
     parser.add_argument("-loglevel", type=str, default="INFO", choices=["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET"], help="Enable logging and set log level. (default: INFO)")
     args = parser.parse_args()
 
@@ -924,6 +926,45 @@ def check_stream_variant(stream, session=None):
     # Default/fallback
     return 0
 
+def load_cookies(cookiejar_path, url):
+    """
+    Load a Netscape/Mozilla cookies.txt file and return only the cookies
+    that match the given URL's domain/path as a dict.
+    """
+
+    def resolve_path(path: str) -> str:
+        if os.path.isabs(path):
+            return path
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        return os.path.join(script_dir, path)
+
+    resolved_file = resolve_path(cookiejar_path)
+
+    # Load cookie jar
+    jar = http.cookiejar.MozillaCookieJar(resolved_file)
+    try:
+        jar.load(ignore_discard=True, ignore_expires=True)
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Cookie file not found: {resolved_file}")
+    except Exception as e:
+        raise RuntimeError(f"Failed to load cookies from {resolved_file}: {e}")
+
+    # Parse target URL
+    parsed = urlparse(url)
+    domain = parsed.hostname
+    path = parsed.path or "/"
+
+    # Filter cookies by domain/path
+    cookies_dict = {}
+    for c in jar:
+        # Domain match (handle leading dot for subdomains)
+        if (c.domain.startswith(".") and domain.endswith(c.domain.lstrip("."))) or (c.domain == domain):
+            # Path match
+            if path.startswith(c.path):
+                cookies_dict[c.name] = c.value
+
+    return cookies_dict
+
 def main():
     global log # allow assignment to the module-level variable
 
@@ -935,10 +976,11 @@ def main():
     input_url, fragments = check_url_fragments(args.i) # Check -i (input URL) for any fragments appended to url (#whatever=thing&#someotherthing=this).
     log.info(f"Stream URL: '{input_url}'")
 
-    # Initialise potential fragment vars
+    # Initialise vars
     clearkey = None
     referer = None
     origin = None
+    cookies = None
     novariantcheck = None
     noaudio = None
     novideo = None
@@ -970,7 +1012,6 @@ def main():
     if novideo is None and args.novideo:
         novideo = args.novideo
 
-
     # Begin header construction with mandatory user agent string
     log.info(f"User Agent: '{args.ua}'")
     headers = {
@@ -985,6 +1026,13 @@ def main():
         log.info(f"Origin: '{origin}'")
         headers["Origin"] = origin
 
+    # Load cookies for initial input_url
+    if args.cookies:
+        log.info(f"Cookie Jar: '{args.cookies}'")
+        cookie_dict = load_cookies(args.cookies, input_url)
+        cookie_header = "; ".join(f"{k}={v}" for k, v in cookie_dict.items())
+        headers["Cookie"] = cookie_header
+
     # If -proxybypass is supplied, check url hostname matches any bypasses
     if args.proxybypass:
         log.info(f"Proxy Bypass: '{args.proxybypass}'")
@@ -994,12 +1042,18 @@ def main():
             args.proxy = None
         else:
             input_url = bypass_result
-            log.info(f"Determined stream URL to proxy: '{input_url}'")
+            log.debug(f"Determined stream URL to proxy: '{input_url}'")
+            if args.cookies:
+                # input_url has changed, reload cookies for new domain
+                cookie_dict = load_cookies(args.cookies, input_url)
+                cookie_header = "; ".join(f"{k}={v}" for k, v in cookie_dict.items())
+                headers["Cookie"] = cookie_header
 
     # Start Streamlink session
     session = Streamlink()
 
     # Set streamlink headers
+    log.debug(f"Headers: {headers}")
     session.set_option("http-headers", headers)
 
     # Apply proxy server to streamlink if supplied using -proxy parameter
