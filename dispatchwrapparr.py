@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-Dispatchwrapparr - Version 1.1: A super wrapper for Dispatcharr
+Dispatchwrapparr - Version 1.2: A super wrapper for Dispatcharr
 
 Usage: dispatchwrapper.py -i <URL> -ua <User Agent String>
 Optional: -proxy <proxy server> -proxybypass <proxy bypass list> -clearkeys <json file/url> -cookies <txt file> -loglevel <level> -subtitles -novariantcheck -novideo -noaudio
@@ -822,7 +822,7 @@ def create_silent_audio(session) -> Stream:
 
     return SilentAudioStream(session)
 
-def create_blank_video(session, resolution="320x180", fps=25, codec="libx264", bitrate="100k") -> Stream:
+def create_blank_video(session, resolution="320x180", fps=1, codec="libx264") -> Stream:
     """
     Create a Streamlink-compatible Stream that produces a blank video.
     Useful for muxing with audio-only streams.
@@ -830,16 +830,14 @@ def create_blank_video(session, resolution="320x180", fps=25, codec="libx264", b
     Args:
         session: Streamlink session instance
         resolution: Video resolution (default 320x180)
-        fps: Frames per second (default 25)
+        fps: Frames per second (default 1)
         codec: Video codec (default libx264)
-        bitrate: Target video bitrate (default 100k)
     """
     cmd = [
         "ffmpeg",
         "-f", "lavfi",
-        "-i", f"color=size={resolution}:rate={fps}:color=black",
+        "-i", f"size={resolution}:rate={fps}:color=black",
         "-c:v", codec,
-        "-b:v", bitrate,
         "-f", "mpegts",
         "pipe:1"
     ]
@@ -1077,14 +1075,15 @@ def main():
     # Apply streamlink options that apply to all streams
     session.set_option("ffmpeg-verbose", True) # Pass ffmpeg stderr through to streamlink
     session.set_option("ffmpeg-fout", "mpegts") # Encode as mpegts when ffmpeg muxing (not matroska like default)
-    session.set_option("ffmpeg-copyts", True) # Copy timestamps when muxing
-    session.set_option("ffmpeg-start-at-zero", True) # Fix for initial stuttering of some streams
-    session.set_option("stream-segment-threads", 2) # Number of threads for fetching segments
+    session.set_option("stream-segment-threads", 4) # Number of threads for fetching segments
 
     streams = None
     # If a clearkey is detected, prepare the stream for DRM decryption
     if clearkey:
         log.info(f"Clearkey(s): '{clearkey}'")
+        # Set session options for DASHDRM streams to fix stuttering
+        session.set_option("ffmpeg-copyts", True)
+        session.set_option("ffmpeg-start-at-zero", True)
         # Prepend dashdrm:// to input_url for dashdrm plugin matching
         input_url = f"dashdrm://{input_url}"
         # Load dashdrm plugin
@@ -1146,6 +1145,9 @@ def main():
 
     elif not noaudio and novideo:
         log.info("No Video: Muxing blank video into supplied audio stream")
+        # Set session options for audio only streams
+        session.set_option("ffmpeg-copyts", False)
+        session.set_option("ffmpeg-start-at-zero", False)
         audio_stream = stream
         video_stream = create_blank_video(session)
         stream = MuxedStream(session, video_stream, audio_stream)
