@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-Dispatchwrapparr - Version 1.0: A super wrapper for Dispatcharr
+Dispatchwrapparr - Version 1.1: A super wrapper for Dispatcharr
 
 Usage: dispatchwrapper.py -i <URL> -ua <User Agent String>
 Optional: -proxy <proxy server> -proxybypass <proxy bypass list> -clearkeys <json file/url> -cookies <txt file> -loglevel <level> -subtitles -novariantcheck -novideo -noaudio
@@ -18,19 +18,15 @@ import logging
 import base64
 import argparse
 import requests
-import socket
-import ipaddress
 import fnmatch
 import json
 import subprocess
 import http.cookiejar
 from urllib.parse import urlparse, parse_qs
-
 from collections import defaultdict
 from contextlib import suppress, closing
 from typing import List, Self, Tuple, Optional
 from datetime import timedelta
-
 from streamlink import Streamlink
 from streamlink.exceptions import PluginError, FatalPluginError, NoPluginError
 from streamlink.plugin import Plugin, pluginmatcher, pluginargument
@@ -1077,15 +1073,15 @@ def main():
     }
 
     ffmpeg_loglevel = python_to_ffmpeg_loglevel.get(python_loglevel) # Set variable with the equivalent loglevel
-
     session.set_option("ffmpeg-loglevel", ffmpeg_loglevel) # Set the ffmpeg loglevel in the session options
-
     # Apply streamlink options that apply to all streams
-    session.set_option("ffmpeg-fout", "mpegts") # Encode as mpegts when ffmpeg muxing (not matroska like default)
     session.set_option("ffmpeg-verbose", True) # Pass ffmpeg stderr through to streamlink
+    session.set_option("ffmpeg-fout", "mpegts") # Encode as mpegts when ffmpeg muxing (not matroska like default)
+    session.set_option("ffmpeg-copyts", True) # Copy timestamps when muxing
+    session.set_option("ffmpeg-start-at-zero", True) # Fix for initial stuttering of some streams
     session.set_option("stream-segment-threads", 2) # Number of threads for fetching segments
-    streams = None
 
+    streams = None
     # If a clearkey is detected, prepare the stream for DRM decryption
     if clearkey:
         log.info(f"Clearkey(s): '{clearkey}'")
@@ -1095,7 +1091,7 @@ def main():
         plugin = MPEGDASHDRM(session, input_url)
         # Set the dashdrm plugin options
         plugin.options["decryption-key"] = [clearkey] # pass clearkey tuple to plugin
-        plugin.options["presentation-delay"] = 30 # Begin dash-drm streams n seconds behind live
+        plugin.options["presentation-delay"] = 40 # Begin dash-drm streams n seconds behind live
         if args.subtitles:
             plugin.options["use-subtitles"]
         # Fetch the available streams
@@ -1107,9 +1103,6 @@ def main():
 
     # For all other non-DRM/clearkey encrypted streams
     else:
-        # Set session options for non-DRM streams
-        session.set_option("ffmpeg-copyts", True) # Copy timestamps enabled for ffmpeg muxing
-        session.set_option("ffmpeg-start-at-zero", True) # Start at zero for ffmpeg muxing
         # Fetch the available streams
         try:
             streams = detect_stream_type(session, input_url, headers, proxy=args.proxy, cookies=cookies_requests) # Pass stream detection off to the detect_stream_type function
