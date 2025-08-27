@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-Dispatchwrapparr - Version 1.2: A super wrapper for Dispatcharr
+Dispatchwrapparr - Version 1.3: A super wrapper for Dispatcharr
 
 Usage: dispatchwrapper.py -i <URL> -ua <User Agent String>
 Optional: -proxy <proxy server> -proxybypass <proxy bypass list> -clearkeys <json file/url> -cookies <txt file> -loglevel <level> -subtitles -novariantcheck -novideo -noaudio
@@ -787,7 +787,7 @@ def detect_stream_type(session, url, headers, proxy=None, cookies=None):
             return HLSStream.parse_variant_playlist(session, url)
         elif "dash+xml" in content_type:
             return DASHStream.parse_manifest(session, url)
-        elif "video/mp2t" in content_type or "application/octet-stream" in content_type or "audio/mpeg" in content_type:
+        elif "application/octet-stream" in content_type or content_type.startswith("audio/") or content_type.startswith("video/"):
             return {"live": HTTPStream(session, url)}
         else:
             log.error("Unrecognized Content-Type for fallback")
@@ -822,7 +822,7 @@ def create_silent_audio(session) -> Stream:
 
     return SilentAudioStream(session)
 
-def create_blank_video(session, resolution="320x180", fps=1, codec="libx264") -> Stream:
+def create_blank_video(session, resolution="320x180", fps=25, codec="libx264") -> Stream:
     """
     Create a Streamlink-compatible Stream that produces a blank video.
     Useful for muxing with audio-only streams.
@@ -830,7 +830,7 @@ def create_blank_video(session, resolution="320x180", fps=1, codec="libx264") ->
     Args:
         session: Streamlink session instance
         resolution: Video resolution (default 320x180)
-        fps: Frames per second (default 1)
+        fps: Frames per second (default 25)
         codec: Video codec (default libx264)
     """
     cmd = [
