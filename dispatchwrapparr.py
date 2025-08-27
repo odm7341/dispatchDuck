@@ -836,7 +836,7 @@ def create_blank_video(session, resolution="320x180", fps=1, codec="libx264") ->
     cmd = [
         "ffmpeg",
         "-f", "lavfi",
-        "-i", f"size={resolution}:rate={fps}:color=black",
+        "-i", f"color=size={resolution}:rate={fps}:color=black",
         "-c:v", codec,
         "-f", "mpegts",
         "pipe:1"
