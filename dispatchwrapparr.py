@@ -1090,7 +1090,7 @@ def main():
         plugin = MPEGDASHDRM(session, input_url)
         # Set the dashdrm plugin options
         plugin.options["decryption-key"] = [clearkey] # pass clearkey tuple to plugin
-        plugin.options["presentation-delay"] = 40 # Begin dash-drm streams n seconds behind live
+        plugin.options["presentation-delay"] = 30 # Begin dash-drm streams n seconds behind live
         if args.subtitles:
             plugin.options["use-subtitles"]
         # Fetch the available streams
