@@ -26,6 +26,7 @@
 - `-proxybypass <comma-delimited hostnames>`: Optional. To be used in conjunction with `-proxy` directive. Supply a comma-delimited list of hostnames to be bypassed from supplied proxy. Wildcards supported.
 - `-clearkeys <clearkey file or url>`: Optional: Supply a json file or URL containing json URL to clearkey mappings.
 - `-cookies <cookie file>`: Optional: Supply a cookies txt file in Mozilla/Netscape format for us with streams.
+- `-stream <stream selection>`: Optional: Supply a streamlink stream selection, eg. "worst" "1080p_alt" etc. Alternatively, use the `#stream=<selection>` URL fragment.
 - `-novariantcheck`: Optional: Skips checks for streams containing video or audio only. Will not force muxing of missing audio or video. Cannot be used with -novideo or -noaudio arguments.
 - `-novideo`: Optional: Designates the stream as containing no video. Forces muxing of blank video into the stream if it is not detected during variant checking automatically.
 - `-noaudio`: Optional: Designates the stream as containing no audio. Forces muxing of silent audio into the stream if it is not detected during variant checking automatically.

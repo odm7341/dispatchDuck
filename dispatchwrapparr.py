@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
 """
-Dispatchwrapparr - Version 1.3: A super wrapper for Dispatcharr
+Dispatchwrapparr - Version 1.3.1: A super wrapper for Dispatcharr
 
 Usage: dispatchwrapper.py -i <URL> -ua <User Agent String>
-Optional: -proxy <proxy server> -proxybypass <proxy bypass list> -clearkeys <json file/url> -cookies <txt file> -loglevel <level> -subtitles -novariantcheck -novideo -noaudio
+Optional: -proxy <proxy server> -proxybypass <proxy bypass list> -clearkeys <json file/url> -cookies <txt file> -loglevel <level> -stream <selection> -subtitles -novariantcheck -novideo -noaudio
 """
 
 from __future__ import annotations
@@ -580,6 +580,7 @@ def parse_args():
     parser.add_argument("-proxybypass", help="Optional: Comma-separated list of hostnames or IP patterns to bypass the proxy (e.g. '192.168.*.*,*.lan')")
     parser.add_argument("-clearkeys", help="Optional: Supply a json file or URL containing URL/Clearkey maps (e.g. 'clearkeys.json' or 'https://some.host/clearkeys.json')")
     parser.add_argument("-cookies", help="Optional: Supply a cookie jar txt file in Mozilla/Netscape format (e.g. 'cookies.txt')")
+    parser.add_argument("-stream", help="Optional: Supply streamlink stream selection argument (eg. best, worst, 1080p, 1080p_alt, etc)")
     parser.add_argument("-subtitles", action="store_true", help="Optional: Enable support for subtitles (if available)")
     parser.add_argument("-novariantcheck", action="store_true", help="Optional: Do not autodetect if stream is audio-only or video-only")
     parser.add_argument("-novideo", action="store_true", help="Optional: Forces muxing of a blank video track into a stream that contains no audio")
@@ -971,22 +972,26 @@ def main():
     clearkey = None
     referer = None
     origin = None
+    streamselection = None
     cookies = None
     cookies_requests = None
     cookies_dict = None
-    novariantcheck = None
-    noaudio = None
-    novideo = None
+
+    # Initialise bools
+    novariantcheck = False
+    noaudio = False
+    novideo = False
 
     # If there are fragments, set them safely
     if fragments:
         clearkey = fragments.get("clearkey")
         referer = fragments.get("referer")
         origin = fragments.get("origin")
-        # Set novariantcheck, noaudio and novideo vars to True if fragments are true, else None
-        novariantcheck = (fragments["novariantcheck"].lower() == "true") if "novariantcheck" in fragments else None
-        noaudio = (fragments["noaudio"].lower() == "true") if "noaudio" in fragments else None
-        novideo = (fragments["novideo"].lower() == "true") if "novideo" in fragments else None
+        streamselection = fragments.get("stream").lower() if fragments.get("stream") else None
+        # Set novariantcheck, noaudio and novideo vars to True if fragments are true, else False
+        novariantcheck = (fragments["novariantcheck"].lower() == "true") if "novariantcheck" in fragments else False
+        noaudio = (fragments["noaudio"].lower() == "true") if "noaudio" in fragments else False
+        novideo = (fragments["novideo"].lower() == "true") if "novideo" in fragments else False
 
     if args.proxy:
         log.info(f"HTTP Proxy: '{args.proxy}'")
@@ -996,13 +1001,17 @@ def main():
         # If -clearkeys argument is supplied, search for a URL match in supplied file/url
         clearkey = check_clearkeys_for_url(input_url,args.clearkeys)
 
+    # Set stream selections from arguments if no url fragment specified
+    if streamselection is None and args.stream:
+        streamselection = args.stream.lower()
+
     # Check if novideo or noaudio are found in URL fragments, if not see if argument is supplied
     # The desired behaviour is that url fragments override any cli arguments
-    if novariantcheck is None and args.novariantcheck:
+    if novariantcheck is False and args.novariantcheck:
         novariantcheck = args.novariantcheck
-    if noaudio is None and args.noaudio:
+    if noaudio is False and args.noaudio:
         noaudio = args.noaudio
-    if novideo is None and args.novideo:
+    if novideo is False and args.novideo:
         novideo = args.novideo
 
     # Begin header construction with mandatory user agent string
@@ -1115,16 +1124,20 @@ def main():
         return
 
     # Select best steam, live or iterate until one is found
-    log.info("Selecting best available stream.")
-    stream = streams.get("best") or streams.get("live") or next(iter(streams.values()), None)
+    if streamselection:
+        log.info(f"Stream Selection: Manually specifying {streamselection}")
+        stream = streams.get(streamselection)
+    else:
+        log.info("Stream Selection: Automatic")
+        stream = streams.get("best") or streams.get("live") or next(iter(streams.values()), None)
 
     # Stream not available, log error and exit
     if not stream:
         log.error("No streams available.")
         return
 
-    # Do a variant check only if novideo and noaudio are None, or novariantcheck is True
-    if novideo is None and noaudio is None and novariantcheck is None:
+    # Do a variant check only if novideo and noaudio are False, or novariantcheck is True
+    if novideo is False and noaudio is False and novariantcheck is False:
         # Attempt to detect stream variant automatically (Eg. Video Only or Audio Only)
         log.debug("Attempting to check stream variant")
         variant = check_stream_variant(stream,session)
