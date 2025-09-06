@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-Dispatchwrapparr - Version 1.3.1: A super wrapper for Dispatcharr
+Dispatchwrapparr - Version 1.3.2: A super wrapper for Dispatcharr
 
 Usage: dispatchwrapper.py -i <URL> -ua <User Agent String>
 Optional: -proxy <proxy server> -proxybypass <proxy bypass list> -clearkeys <json file/url> -cookies <txt file> -loglevel <level> -stream <selection> -subtitles -novariantcheck -novideo -noaudio
@@ -1101,7 +1101,7 @@ def main():
         plugin.options["decryption-key"] = [clearkey] # pass clearkey tuple to plugin
         plugin.options["presentation-delay"] = 30 # Begin dash-drm streams n seconds behind live
         if args.subtitles:
-            plugin.options["use-subtitles"]
+            plugin.options["use-subtitles"] = True
         # Fetch the available streams
         try:
             streams = plugin.streams()
