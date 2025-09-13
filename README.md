@@ -186,6 +186,10 @@ The `-noaudio` argument can be supplied to dispatchwrapparr as a custom profile 
 
 Note: Using the novideo and noaudio arguments either as a fragment or a cli argument will disable the stream variant detection.
 
+### Custom ffmpeg builds
+
+Place a custom 'ffmpeg' binary alongside the dispatchwrapparr.py script, and it'll use that version of ffmpeg than the one discovered in PATH
+
 
 ## ❤️ Shoutouts
 

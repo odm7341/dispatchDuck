@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-Dispatchwrapparr - Version 1.3.2: A super wrapper for Dispatcharr
+Dispatchwrapparr - Version 1.3.3: A super wrapper for Dispatcharr
 
 Usage: dispatchwrapper.py -i <URL> -ua <User Agent String>
 Optional: -proxy <proxy server> -proxybypass <proxy bypass list> -clearkeys <json file/url> -cookies <txt file> -loglevel <level> -stream <selection> -subtitles -novariantcheck -novideo -noaudio
@@ -1078,7 +1078,10 @@ def main():
         "DEBUG":    "debug",
         "NOTSET":   "trace"
     }
-
+    # Check if there's an ffmpeg binary in the dispatchwrappar directory, and if there is, use it
+    ffmpeg_check = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ffmpeg")
+    if os.path.isfile(ffmpeg_check):
+        session.set_option("ffmpeg-ffmpeg", ffmpeg_check)
     ffmpeg_loglevel = python_to_ffmpeg_loglevel.get(python_loglevel) # Set variable with the equivalent loglevel
     session.set_option("ffmpeg-loglevel", ffmpeg_loglevel) # Set the ffmpeg loglevel in the session options
     # Apply streamlink options that apply to all streams
