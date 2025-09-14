@@ -72,7 +72,8 @@ If you wish to use a proxy server, create a separate profile:
 
 There are two methods for playing DASHDRM streams. Method 1 is easiest and is detailed below.
 
-***Dispatcharr 0.9.0 / ffmpeg 8.0 / garbled/green video issue***
+*** !!!! Dispatcharr 0.9.0 / ffmpeg 8.0 / garbled/green video issue !!!! ***
+
 There is currently an issue with decrypting DASHDRM streams since the release of Dispatcharr 0.9.0.
 During this release, Dispatcharr was bundled with ffmpeg 8.0 which in some circumstances returns garbled/green video content.
 The solution at this stage is to download an earlier ffmpeg binary and place it into the same directory as dispatchwrapparr.py.
