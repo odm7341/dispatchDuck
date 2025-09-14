@@ -4,7 +4,6 @@
   <img src="https://github.com/user-attachments/assets/eb65168b-e24f-4e0c-b17b-7d72021d1d15" height="250" alt="Dispatchwrapparr Logo" />
 </p>
 
-
 ## 🤝 What does dispatchwrapparr do?
 
 ✅ **Builtin MPEG-DASH Clearkey/DRM Support** — Either append a `#clearkey=<clearkey>` fragment to the end of the URL or include a clearkeys json file or URL for DRM decryption\
@@ -71,7 +70,13 @@ If you wish to use a proxy server, create a separate profile:
 
 ## ✨ How can I play DASHDRM streams?
 
-Easy! There are two methods, the first of which is the most simple for starting out.
+There are two methods for playing DASHDRM streams. Method 1 is easiest and is detailed below.
+
+***Dispatcharr 0.9.0 / ffmpeg 8.0 / garbled/green video issue***
+There is currently an issue with decrypting DASHDRM streams since the release of Dispatcharr 0.9.0.
+During this release, Dispatcharr was bundled with ffmpeg 8.0 which in some circumstances returns garbled/green video content.
+The solution at this stage is to download an earlier ffmpeg binary and place it into the same directory as dispatchwrapparr.py.
+I recommend the use of [jellyfin-ffmpeg](https://github.com/jellyfin/jellyfin-ffmpeg/releases) latest `portable_linux64-gpl` release binaries.
 
 ***Method 1: Append a #clearkey=<clearkey> fragment to the stream URL***
 
@@ -185,10 +190,6 @@ https://spacetv.sen.com/out/v1/058d27c98eb543c987d75d60085b61c7/index/index.m3u8
 The `-noaudio` argument can be supplied to dispatchwrapparr as a custom profile for video-only streams.
 
 Note: Using the novideo and noaudio arguments either as a fragment or a cli argument will disable the stream variant detection.
-
-### Custom ffmpeg builds
-
-Place a custom 'ffmpeg' binary alongside the dispatchwrapparr.py script, and it'll use that version of ffmpeg than the one discovered in PATH
 
 
 ## ❤️ Shoutouts
