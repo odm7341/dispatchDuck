@@ -577,7 +577,7 @@ def parse_args():
     parser.add_argument("-i", required=True, help="Input URL")
     parser.add_argument("-ua", required=True, help="User-Agent string")
     parser.add_argument("-proxy", help="Optional: HTTP proxy server (e.g. http://127.0.0.1:8888)")
-    parser.add_argument("-proxybypass", help="Optional: Comma-separated list of hostnames or IP patterns to bypass the proxy (e.g. '192.168.*.*,*.lan')")
+    parser.add_argument("-proxybypass", help="Optional: Comma-separated list of hostnames or IP addresses to bypass the proxy. (e.g. '.local,192.168.50.2:90' )")
     parser.add_argument("-clearkeys", help="Optional: Supply a json file or URL containing URL/Clearkey maps (e.g. 'clearkeys.json' or 'https://some.host/clearkeys.json')")
     parser.add_argument("-cookies", help="Optional: Supply a cookie jar txt file in Mozilla/Netscape format (e.g. 'cookies.txt')")
     parser.add_argument("-stream", help="Optional: Supply streamlink stream selection argument (eg. best, worst, 1080p, 1080p_alt, etc)")
@@ -1013,8 +1013,8 @@ def main():
 
     # Set generic session options for Streamlink
     session.set_option("stream-segment-threads", 2)
-    session.set_option("http-timeout", 10)
-    session.set_option("stream-segment-timeout", 8)
+    session.set_option("http-timeout", 5)
+    session.set_option("stream-segment-timeout", 5)
     session.set_option("stream-timeout", 10)
 
     # If cli -proxy argument supplied

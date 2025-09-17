@@ -22,17 +22,18 @@
 - `-i`: Required input URL
 - `-ua`: Required user agent string
 - `-proxy <proxy server>`: Optional: Configure a proxy server. Supports http, https only.
-- `-proxybypass <comma-delimited hostnames>`: Optional. To be used in conjunction with `-proxy` directive. Supply a comma-delimited list of hostnames to be bypassed from supplied proxy. Wildcards supported.
+- `-proxybypass <comma-delimited hostnames>`: Optional. A comma delimited list of hostnames to bypass. Eg. '.local,192.168.0.44:90'. Do not use "*", this is unsupported. Wilcards match with '.'
 - `-clearkeys <clearkey file or url>`: Optional: Supply a json file or URL containing json URL to clearkey mappings.
 - `-cookies <cookie file>`: Optional: Supply a cookies txt file in Mozilla/Netscape format for us with streams.
 - `-stream <stream selection>`: Optional: Supply a streamlink stream selection, eg. "worst" "1080p_alt" etc. Alternatively, use the `#stream=<selection>` URL fragment.
+- `-ffmpeg <ffmpeg location>`: Optional: Specify the location of an ffmpeg binary for use in stream muxing instead of auto detecting ffmpeg binaries in PATH or in the same directory as dispatchwrapparr.
 - `-novariantcheck`: Optional: Skips checks for streams containing video or audio only. Will not force muxing of missing audio or video. Cannot be used with -novideo or -noaudio arguments.
 - `-novideo`: Optional: Designates the stream as containing no video. Forces muxing of blank video into the stream if it is not detected during variant checking automatically.
 - `-noaudio`: Optional: Designates the stream as containing no audio. Forces muxing of silent audio into the stream if it is not detected during variant checking automatically.
 - `-loglevel <loglevel>`: Optional: to change the default log level of "INFO". Supported options: "CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", and "NOTSET".
 - `-subtitles`: Optional to enable muxing of subtitles. Disabled by default. NOTE: Subtitle support in streamlink is limited at best. May not work as intended.
 
-Example: `dispatchwrapparr.py -i {streamUrl} -ua {userAgent} [-proxy 'http://your.proxy.server:3128' -proxybypass '192.168.0.*,*.somesite.com' -clearkeys 'clearkeys.json' -loglevel 'INFO' -subtitles]`
+Example: `dispatchwrapparr.py -i {streamUrl} -ua {userAgent} [-proxy 'http://your.proxy.server:3128' -proxybypass '192.168.0.55,.somesite.com' -clearkeys 'clearkeys.json' -loglevel 'INFO' -subtitles]`
 
 ---
 
@@ -76,7 +77,7 @@ There are two methods for playing DASHDRM streams. Method 1 is easiest and is de
 
 There is currently an issue with decrypting DASHDRM streams since the release of Dispatcharr 0.9.0.
 During this release, Dispatcharr was bundled with ffmpeg 8.0 which in some circumstances returns garbled/green video content.
-The solution at this stage is to download an earlier ffmpeg binary and place it into the same directory as dispatchwrapparr.py.
+The solution at this stage is to download an earlier ffmpeg binary and place it into the same directory as dispatchwrapparr.py. I have also added a `-ffmpeg` argument to specify a custom ffmpeg location.
 I recommend the use of [jellyfin-ffmpeg](https://github.com/jellyfin/jellyfin-ffmpeg/releases) latest `portable_linux64-gpl` release binaries.
 
 ***Method 1: Append a #clearkey=<clearkey> fragment to the stream URL***
@@ -143,6 +144,7 @@ Plex/Emby/Jellyfin expects to receive both video and audio in any streams that i
 Dispatchwrapparr will attempt to autodetect if a stream contains only audio, or only video as part of its stream variant checking.
 
 To disable auto-detection of audio-only and video-only streams, the `-novariantcheck` flag may be used in a custom profile or the `#novariantcheck=true` url fragment.
+
 
 ### Audio-only streams (Eg. Streaming Radio)
 
