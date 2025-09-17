@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-Dispatchwrapparr - Version 1.3.3: A super wrapper for Dispatcharr
+Dispatchwrapparr - Version 1.3.4: A super wrapper for Dispatcharr
 
 Usage: dispatchwrapper.py -i <URL> -ua <User Agent String>
 Optional: -proxy <proxy server> -proxybypass <proxy bypass list> -clearkeys <json file/url> -cookies <txt file> -loglevel <level> -stream <selection> -subtitles -novariantcheck -novideo -noaudio
@@ -573,7 +573,7 @@ class DASHStreamDRM(DASHStream):
 
 def parse_args():
     # Initial wrapper arguments
-    parser = argparse.ArgumentParser(description="Dispatchwrapparr: A wrapper for Dispatcharr")
+    parser = argparse.ArgumentParser(description="Dispatchwrapparr: A super wrapper for Dispatcharr")
     parser.add_argument("-i", required=True, help="Input URL")
     parser.add_argument("-ua", required=True, help="User-Agent string")
     parser.add_argument("-proxy", help="Optional: HTTP proxy server (e.g. http://127.0.0.1:8888)")
@@ -581,6 +581,7 @@ def parse_args():
     parser.add_argument("-clearkeys", help="Optional: Supply a json file or URL containing URL/Clearkey maps (e.g. 'clearkeys.json' or 'https://some.host/clearkeys.json')")
     parser.add_argument("-cookies", help="Optional: Supply a cookie jar txt file in Mozilla/Netscape format (e.g. 'cookies.txt')")
     parser.add_argument("-stream", help="Optional: Supply streamlink stream selection argument (eg. best, worst, 1080p, 1080p_alt, etc)")
+    parser.add_argument("-ffmpeg", help="Optional: Specify a custom ffmpeg binary path")
     parser.add_argument("-subtitles", action="store_true", help="Optional: Enable support for subtitles (if available)")
     parser.add_argument("-novariantcheck", action="store_true", help="Optional: Do not autodetect if stream is audio-only or video-only")
     parser.add_argument("-novideo", action="store_true", help="Optional: Forces muxing of a blank video track into a stream that contains no audio")
@@ -588,7 +589,7 @@ def parse_args():
     parser.add_argument("-loglevel", type=str, default="INFO", choices=["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET"], help="Enable logging and set log level. (default: INFO)")
     args = parser.parse_args()
 
-    # Enforce dependency for proxybypass, must be used with proxy (duh!!)
+    # Enforce dependency for proxybypass, must be used with proxy
     if args.proxybypass and not args.proxy:
         parser.error("Argument -proxybypass: requires -proxy to be set")
 
@@ -598,7 +599,6 @@ def parse_args():
         parser.error("Arguments -novariantcheck, -novideo and -noaudio can only be used individually")
 
     return args
-
 
 def configure_logging(level="INFO") -> logging.Logger:
     """
@@ -632,48 +632,55 @@ def configure_logging(level="INFO") -> logging.Logger:
     log = logging.getLogger("dispatchwrapparr")
     return log
 
-def proxy_bypass_req(url: str, headers: dict, cookies: dict, bypasslist: str) -> str | None:
+def load_cookies(cookiejar_path: str):
     """
-    Determines what to do with supplied -proxybypass list
-    - If supplied URL's hostname is not in bypass list, return the same URL and use proxy.
-    - If '200' OK received, return 'None'. Main function will remove the proxy server for the given URL for processing.
-    - If '301' or '302' redirector occurs, follow redirects until proxy bypass list no longer matches hostname, then return the new URL.
-    - If any other HTTP code is received, throw an error and fallback to the original URL and continue to use proxy.
+    Load all cookies from a Netscape/Mozilla cookies.txt file
+    and return dict suitable for Streamlink or manual headers
     """
 
-    bypass_patterns = [pattern.strip() for pattern in bypasslist.split(",")]
+    def resolve_path(path: str) -> str:
+        if os.path.isabs(path):
+            return path
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        return os.path.join(script_dir, path)
 
+    resolved_file = resolve_path(cookiejar_path)
+
+    # Load cookie jar
+    jar = http.cookiejar.MozillaCookieJar(resolved_file)
     try:
-        # First check: is original host in bypass list?
-        parsed = urlparse(url)
-        hostname = parsed.hostname
-        if not hostname or not any(fnmatch.fnmatch(hostname, pat) for pat in bypass_patterns):
-            return url  # hostname not in bypass list — use proxy
-
-        # Hostname *is* in bypass list, begin checking for redirects
-        while True:
-            response = requests.get(url, headers=headers, cookies=cookies, allow_redirects=False, timeout=5)
-            status = response.status_code
-
-            if status == 200:
-                return None  # good response, no proxy needed
-            elif status in (301, 302):
-                location = response.headers.get("Location")
-                if not location:
-                    break
-                next_host = urlparse(location).hostname
-                if next_host and any(fnmatch.fnmatch(next_host, pat) for pat in bypass_patterns):
-                    url = location
-                    continue
-                else:
-                    return location  # left bypass list
-            else:
-                return url  # unexpected code, return original
+        jar.load(ignore_discard=True, ignore_expires=True)
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Cookie file not found: {cookiejar_path}")
     except Exception as e:
-        log.warning(f"proxy_bypass_req failed: {e}")
-        return url  # fallback to original
+        raise RuntimeError(f"Failed to load cookies from {cookiejar_path}: {e}")
 
-def check_clearkeys_for_url(stream_url: str, clearkeys_source: str = None) -> str | None:
+    # Build cookies dict
+    cookies_dict = {}
+    for c in jar:
+        cookies_dict[c.name] = c.value
+
+    return cookies_dict
+
+def get_ffmpeg_loglevel(loglevel: str):
+    """
+    Simple function to convert a python loglevel to an
+    equivalent ffmpeg loglevel
+    """
+
+    # dict for python/ffmpeg loglevel equivalencies
+    convert_loglevel = {
+        "CRITICAL": "panic",
+        "ERROR":    "error",
+        "WARNING":  "warning",
+        "INFO":     "info",
+        "DEBUG":    "debug",
+        "NOTSET":   "trace"
+    }
+
+    return convert_loglevel.get(loglevel.upper())
+
+def find_clearkeys_by_url(stream_url: str, clearkeys_source: str = None) -> str | None:
     """
     Return the ClearKey string from JSON mapping for the given stream URL.
     Supports wildcard pattern matching. Defaults to ./clearkeys.json.
@@ -726,7 +733,7 @@ def check_clearkeys_for_url(stream_url: str, clearkeys_source: str = None) -> st
     log.info(f"No matching clearkey(s) found for '{stream_url}'. Moving on.")
     return None
 
-def check_url_fragments(raw_url: str):
+def split_fragments(raw_url: str):
     """
     Parses the input URL and extracts fragment parameters into a dictionary.
 
@@ -749,54 +756,145 @@ def check_url_fragments(raw_url: str):
     else:
         return base_url, None
 
-def detect_stream_type(session, url, headers, proxy=None, cookies=None):
+def detect_streams(session, url, clearkey, subtitles):
     """
-    Tries to pass the URL directly to Streamlink, and if it cannot determine the stream type
+    Performs extended plugin matching for Streamlink
+    First identifies if clearkey specified then select dashdrm plugin.
+    Then it'll try to pass the URL directly to Streamlink, and if it cannot determine the stream type
     it makes a request to discover the MIME type and selects the appropriate stream type.
 
-    Returns a dict of streams
+    Returns a dict of possible streams
     """
+
+    # If clearkey then pass directly to dashdrm plugin
+    if clearkey:
+        log.info(f"Clearkey(s): '{clearkey}'")
+        # Set session options for DASHDRM streams to fix stuttering
+        session.set_option("ffmpeg-copyts", True)
+        session.set_option("ffmpeg-start-at-zero", True)
+        # Prepend dashdrm:// to url for dashdrm plugin matching
+        url = f"dashdrm://{url}"
+        # Load dashdrm plugin
+        dashdrm = MPEGDASHDRM(session, url)
+        # Set the dashdrm plugin options
+        dashdrm.options["decryption-key"] = [clearkey] # pass clearkey tuple to plugin
+        dashdrm.options["presentation-delay"] = 30 # Begin dash-drm streams n seconds behind live
+        if subtitles:
+            dashdrm.options["use-subtitles"] = True
+        # Fetch the available streams
+        try:
+            return dashdrm.streams()
+        except PluginError as e:
+            log.error(f"Failed to load DRM plugin: {e}")
+            raise
+
     try:
+        # First try streamlink's inbuilt plugin detection
         return session.streams(url)
     except NoPluginError:
+        # Exception occurred because no matching plugin could be found, let's see what else we can do...
         log.warning("No plugin found for URL. Attempting fallback based on MIME type...")
-
-        # Add a bytes range for GET so that it doesn't download too much
-        headers["Range"] = "bytes=0-1023"
-
-        proxies = {
-            "http": proxy,
-            "https": proxy
-        } if proxy else None
-
         try:
-            response = requests.get(
+            # Use streamlink's existing requests session. I used a GET here because some servers don't allow HEAD.
+            response = session.http.get(
                 url,
-                headers=headers,
-                cookies=cookies,
-                proxies=proxies,
+                timeout=5,
                 stream=True,
-                timeout=5
+                headers={"Range": "bytes=0-1023"}
             )
             content_type = response.headers.get("Content-Type", "").lower()
+            log.debug(f"Response: {content_type}")
             log.info(f"Detected Content-Type: {content_type}")
         except Exception as e:
             log.error(f"Could not detect stream type: {e}")
             raise
-
+        # HLS stream detected by content-type
         if "vnd.apple.mpegurl" in content_type or "x-mpegurl" in content_type:
             return HLSStream.parse_variant_playlist(session, url)
+        # MPEG-DASH stream detected by content-type
         elif "dash+xml" in content_type:
             return DASHStream.parse_manifest(session, url)
+        # Standard HTTP Stream detected by content-type. Return with "live" as only one variant will exist.
         elif "application/octet-stream" in content_type or content_type.startswith("audio/") or content_type.startswith("video/"):
             return {"live": HTTPStream(session, url)}
         else:
-            log.error("Unrecognized Content-Type for fallback")
+            # Exhaused all options.
+            log.error("Cannot detect stream type - Exhausted all methods!")
             raise
 
+    # Exception occurred due to a plugin failure
     except PluginError as e:
         log.error(f"Plugin failed: {e}")
         raise
+
+def check_stream_variant(stream, session=None):
+    """ Checks for different stream variants:
+    Eg. Audio Only streams or Video streams with no audio
+    Can be disabled by using the -nocheckvariant argument
+
+    Returns integer:
+    0 = Normal Audio/Video
+    1 = Audio Only Stream (Radio streams)
+    2 = Video Only Stream (Cameras or other livestreams with no audio)
+    """
+
+    log.debug("Starting Stream Variant Checks...")
+    # HLSStream case
+    if isinstance(stream, HLSStream) and getattr(stream, "multivariant", None):
+        log.debug("Variant Check: HLSStream Selected")
+        # Find the playlist attributes by "best" selected url
+        selected_playlist = None
+        for playlist in stream.multivariant.playlists:
+            if playlist.uri == stream.url:
+                selected_playlist = playlist
+                break
+
+        if selected_playlist:
+            codecs = selected_playlist.stream_info.codecs or []
+            log.debug(f"Stream Codecs: {codecs}")
+            # Check for audio/video presence
+            has_video = any(c.startswith(("avc", "hev", "vp")) for c in codecs)
+            has_audio = any(c.startswith(("mp4a", "aac")) for c in codecs)
+
+            if has_audio and not has_video:
+                log.debug("Detected Audio Only Stream")
+                return 1
+            elif has_video and not has_audio:
+                log.debug("Detected Video Only Stream")
+                return 2
+            else:
+                log.debug("Detected Audio+Video Stream")
+                return 0
+
+    # HTTPStream case
+    if isinstance(stream, HTTPStream):
+        log.debug("Variant Check: HTTPStream Selected")
+        # Fast path: detect audio-only by extension
+        url = stream.url.lower()
+        if url.endswith((".aac", ".m4a", ".mp3", ".ogg")):
+            log.debug(f"Detected Audio Only Stream by Extension: {url.endswith}")
+            return 1
+        if url.endswith((".mp4", ".mkv", ".webm", ".mov")):
+            log.debug(f"Detected Video+Audio Stream by Extension: {url.endswith}")
+            return 0
+        # Safe path: check Content-Type via GET (stream=True) if session provided
+        if session:
+            try:
+                with closing(session.http.get(stream.url, stream=True, timeout=5)) as r:
+                    ctype = r.headers.get("Content-Type", "").lower()
+                    if ctype.startswith("audio/"):
+                        log.debug(f"Detected Audio Only Stream by Content-Type: {ctype}")
+                        return 1
+                    if ctype.startswith("video/"):
+                        log.debug(f"Detected Video+Audio Stream by Content-Type: {ctype}")
+                        return 0
+            except Exception:
+                # Ignore errors (405, timeout, etc.)
+                return 0
+        return 0
+
+    # Default/fallback
+    return 0
 
 def create_silent_audio(session) -> Stream:
     """
@@ -854,312 +952,171 @@ def create_blank_video(session, resolution="320x180", fps=25, codec="libx264") -
 
     return BlankVideoStream(session)
 
-
-def check_stream_variant(stream, session=None):
-    """ Checks for different stream variants:
-    Eg. Audio Only streams or Video streams with no audio
-    Can be disabled by using the -nocheckvariant argument
-
-    Returns integer:
-    0 = Normal Audio/Video
-    1 = Audio Only Stream (Radio streams)
-    2 = Video Only Stream (Cameras or other livestreams with no audio)
-    """
-
-    # HLSStream case
-    if isinstance(stream, HLSStream) and getattr(stream, "multivariant", None):
-        log.debug("HLSStream Selected")
-        # Find the playlist attributes by "best" selected url
-        selected_playlist = None
-        for playlist in stream.multivariant.playlists:
-            if playlist.uri == stream.url:
-                selected_playlist = playlist
-                break
-
-        if selected_playlist:
-            codecs = selected_playlist.stream_info.codecs or []
-            log.debug(f"Stream Codecs: {codecs}")
-            # Check for audio/video presence
-            has_video = any(c.startswith(("avc", "hev", "vp")) for c in codecs)
-            has_audio = any(c.startswith(("mp4a", "aac")) for c in codecs)
-
-            if has_audio and not has_video:
-                log.debug("Detected Audio Only Stream")
-                return 1
-            elif has_video and not has_audio:
-                log.debug("Detected Video Only Stream")
-                return 2
-            else:
-                log.debug("Detected Audio+Video Stream")
-                return 0
-
-    # HTTPStream case
-    if isinstance(stream, HTTPStream):
-        log.debug("HTTPStream Selected")
-        # Fast path: detect audio-only by extension
-        url = stream.url.lower()
-        if url.endswith((".aac", ".m4a", ".mp3", ".ogg")):
-            log.debug(f"Detected Audio Only Stream by Extension: {url.endswith}")
-            return 1
-        if url.endswith((".mp4", ".mkv", ".webm", ".mov")):
-            log.debug(f"Detected Video+Audio Stream by Extension: {url.endswith}")
-            return 0
-        # Safe path: check Content-Type via GET (stream=True) if session provided
-        if session:
-            try:
-                with closing(session.http.get(stream.url, stream=True, timeout=5)) as r:
-                    ctype = r.headers.get("Content-Type", "").lower()
-                    if ctype.startswith("audio/"):
-                        log.debug(f"Detected Audio Only Stream by Content-Type: {ctype}")
-                        return 1
-                    if ctype.startswith("video/"):
-                        log.debug(f"Detected Video+Audio Stream by Content-Type: {ctype}")
-                        return 0
-            except Exception:
-                # Ignore errors (405, timeout, etc.)
-                return 0
-        return 0
-
-    # Default/fallback
-    return 0
-
-def load_cookies(cookiejar_path: str):
-    """
-    Load all cookies from a Netscape/Mozilla cookies.txt file
-    and return:
-      - cookies_dict: dict suitable for Streamlink or manual headers
-      - cookies_requests: RequestsCookieJar for requests.Session
-    """
-
-    def resolve_path(path: str) -> str:
-        if os.path.isabs(path):
-            return path
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        return os.path.join(script_dir, path)
-
-    resolved_file = resolve_path(cookiejar_path)
-
-    # Load cookie jar
-    jar = http.cookiejar.MozillaCookieJar(resolved_file)
-    try:
-        jar.load(ignore_discard=True, ignore_expires=True)
-    except FileNotFoundError:
-        raise FileNotFoundError(f"Cookie file not found: {cookiejar_path}")
-    except Exception as e:
-        raise RuntimeError(f"Failed to load cookies from {cookiejar_path}: {e}")
-
-    # Build dict and RequestsCookieJar
-    cookies_dict = {}
-    cookies_requests = requests.cookies.RequestsCookieJar()
-    for c in jar:
-        cookies_dict[c.name] = c.value
-        cookies_requests.set(c.name, c.value, domain=c.domain, path=c.path, secure=c.secure, expires=c.expires)
-
-    return cookies_dict, cookies_requests
-
 def main():
-    global log # allow assignment to the module-level variable
+    # Set log as global var
+    global log
+    # Collect cli args from argparse and pass initialise dw_opts
+    dw_opts = parse_args()
+    # Initialise dw_opts attributes that don't have a cli argument
+    for attr in ("clearkey", "referer", "origin"):
+        setattr(dw_opts, attr, None)
+    # Configure log level
+    log = configure_logging(dw_opts.loglevel)
+    log.info(f"Log Level: '{dw_opts.loglevel}'")
+    # Process the input url and split off any fragments. Returns nonetype if no fragments
+    url, fragments = split_fragments(dw_opts.i)
+    log.info(f"Stream URL: '{url}'")
 
-    args = parse_args() # Parse input arguments
-
-    log = configure_logging(args.loglevel) # Configure logging
-    log.info(f"Log Level: '{args.loglevel}'")
-
-    input_url, fragments = check_url_fragments(args.i) # Check -i (input URL) for any fragments appended to url (#whatever=thing&#someotherthing=this).
-    log.info(f"Stream URL: '{input_url}'")
-
-    # Initialise vars
-    clearkey = None
-    referer = None
-    origin = None
-    streamselection = None
-    cookies = None
-    cookies_requests = None
-    cookies_dict = None
-
-    # Initialise bools
-    novariantcheck = False
-    noaudio = False
-    novideo = False
-
-    # If there are fragments, set them safely
+    # Begin processing URL fragments into dw_opts
     if fragments:
-        clearkey = fragments.get("clearkey")
-        referer = fragments.get("referer")
-        origin = fragments.get("origin")
-        streamselection = fragments.get("stream").lower() if fragments.get("stream") else None
-        # Set novariantcheck, noaudio and novideo vars to True if fragments are true, else False
-        novariantcheck = (fragments["novariantcheck"].lower() == "true") if "novariantcheck" in fragments else False
-        noaudio = (fragments["noaudio"].lower() == "true") if "noaudio" in fragments else False
-        novideo = (fragments["novideo"].lower() == "true") if "novideo" in fragments else False
+        dw_opts.clearkey = fragments.get("clearkey") if fragments.get("clearkey") else None
+        dw_opts.stream = fragments.get("stream").lower() if fragments.get("stream") else None
+        dw_opts.referer = fragments.get("referer") if fragments.get("referer") else None
+        dw_opts.origin = fragments.get("origin") if fragments.get("origin") else None
+        dw_opts.novariantcheck = (fragments["novariantcheck"].lower() == "true") if "novariantcheck" in fragments else False
+        dw_opts.noaudio = (fragments["noaudio"].lower() == "true") if "noaudio" in fragments else False
+        dw_opts.novideo = (fragments["novideo"].lower() == "true") if "novideo" in fragments else False
 
-    if args.proxy:
-        log.info(f"HTTP Proxy: '{args.proxy}'")
+    # If -clearkeys argument is supplied and clearkey is None, search for a URL match in supplied file/url
+    if dw_opts.clearkeys and not dw_opts.clearkey:
+        dw_opts.clearkey = find_clearkeys_by_url(url,dw_opts.clearkeys)
 
-    # Find clearkey if -clearkeys arg specified and one hasn't been found in fragments
-    if clearkey is None and args.clearkeys:
-        # If -clearkeys argument is supplied, search for a URL match in supplied file/url
-        clearkey = check_clearkeys_for_url(input_url,args.clearkeys)
-
-    # Set stream selections from arguments if no url fragment specified
-    if streamselection is None and args.stream:
-        streamselection = args.stream.lower()
-
-    # Check if novideo or noaudio are found in URL fragments, if not see if argument is supplied
-    # The desired behaviour is that url fragments override any cli arguments
-    if novariantcheck is False and args.novariantcheck:
-        novariantcheck = args.novariantcheck
-    if noaudio is False and args.noaudio:
-        noaudio = args.noaudio
-    if novideo is False and args.novideo:
-        novideo = args.novideo
-
-    # Begin header construction with mandatory user agent string
-    log.info(f"User Agent: '{args.ua}'")
-    headers = {
-        "User-Agent": args.ua
-    }
-
-    # Append additional headers if set
-    if referer:
-        log.info(f"Referer: '{referer}'")
-        headers["Referer"] = referer
-    if origin:
-        log.info(f"Origin: '{origin}'")
-        headers["Origin"] = origin
-
-    if args.cookies:
-        # load cookies and create cookies_dict for streamlink, and cookies_requests for using with requests lib
-        log.info(f"Cookies: Loading cookies from file '{args.cookies}'")
-        cookies_dict,cookies_requests = load_cookies(args.cookies)
-
-    # If -proxybypass is supplied, check url hostname matches any bypasses
-    if args.proxybypass:
-        log.info(f"Proxy Bypass: '{args.proxybypass}'")
-        bypass_result = proxy_bypass_req(input_url, headers, cookies_requests, args.proxybypass)
-        if bypass_result is None:
-            log.info(f"Bypassing supplied proxy for stream URL: '{input_url}'")
-            args.proxy = None
-        else:
-            input_url = bypass_result
-            log.debug(f"Determined stream URL to proxy: '{input_url}'")
-
-    # Start Streamlink session
+    """
+    Begin setting up the Streamlink Session
+    """
     session = Streamlink()
 
-    # Set cookies if enabled
-    if args.cookies:
-        session.set_option("http-cookies", cookies_dict)
-
-    # Set streamlink headers
-    log.debug(f"Headers: {headers}")
-    session.set_option("http-headers", headers)
-
-    # Apply proxy server to streamlink if supplied using -proxy parameter
-    if args.proxy:
-        session.set_option("http-proxy", args.proxy)
-        # set ipv4 only mode when using proxy (fixes reliability issues)
-        session.set_option("ipv4", True)
-
-    # If -subtitles flag is set (mux-subtitles is False by default)
-    if args.subtitles:
-        log.info(f"Mux Subtitles: Enabled (may or may not work)")
-        session.set_option("mux-subtitles", True)
-
-    # If loglevel set as option, pass the same loglevel to ffmpeg
-    python_loglevel = args.loglevel.upper() # Normalise the string and set python_loglevel var
-
-    # Create a dict with python to ffmpeg loglevel equivalencies
-    python_to_ffmpeg_loglevel = {
-        "CRITICAL": "panic",
-        "ERROR":    "error",
-        "WARNING":  "warning",
-        "INFO":     "info",
-        "DEBUG":    "debug",
-        "NOTSET":   "trace"
+    # Begin header construction with mandatory user agent string
+    headers = {
+        "User-Agent": dw_opts.ua
     }
-    # Check if there's an ffmpeg binary in the dispatchwrappar directory, and if there is, use it
-    ffmpeg_check = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ffmpeg")
-    if os.path.isfile(ffmpeg_check):
-        session.set_option("ffmpeg-ffmpeg", ffmpeg_check)
-    ffmpeg_loglevel = python_to_ffmpeg_loglevel.get(python_loglevel) # Set variable with the equivalent loglevel
-    session.set_option("ffmpeg-loglevel", ffmpeg_loglevel) # Set the ffmpeg loglevel in the session options
-    # Apply streamlink options that apply to all streams
+    log.info(f"User Agent: '{dw_opts.ua}'")
+
+    # Append additional headers if set
+    if dw_opts.referer:
+        headers["Referer"] = dw_opts.referer
+        log.info(f"Referer: '{dw_opts.referer}'")
+
+    if dw_opts.origin:
+        headers["Origin"] = dw_opts.origin
+        log.info(f"Origin: '{dw_opts.origin}'")
+
+    if dw_opts.cookies:
+        # load cookies and create cookies_dict for streamlink
+        cookies = load_cookies(dw_opts.cookies)
+        session.set_option("http-cookies", cookies)
+        log.info(f"Cookies: Loading cookies from file '{dw_opts.cookies}'")
+
+    # Set http-headers for streamlink
+    session.set_option("http-headers", headers)
+    log.debug(f"Headers: {headers}")
+
+    # Set generic session options for Streamlink
+    session.set_option("stream-segment-threads", 2)
+    session.set_option("http-timeout", 10)
+    session.set_option("stream-segment-timeout", 8)
+    session.set_option("stream-timeout", 10)
+
+    # If cli -proxy argument supplied
+    if dw_opts.proxy:
+        # Set proxies as env vars for streamlink/requests/ffmpeg et al
+        os.environ["HTTP_PROXY"] = dw_opts.proxy
+        os.environ["HTTPS_PROXY"] = dw_opts.proxy
+        log.info(f"HTTP Proxy: '{dw_opts.proxy}'")
+        # Set ipv4 only mode when using proxy (fixes reliability issues with dual stack streams)
+        session.set_option("ipv4", True)
+        # If -proxybypass is also supplied
+        if dw_opts.proxybypass:
+            proxybypass = dw_opts.proxybypass.strip("*") # strip any globs off as they're no longer supported
+            os.environ["NO_PROXY"] = proxybypass
+            log.info(f"Proxy Bypass: '{dw_opts.proxybypass}'")
+
+    # If -subtitles arg supplied
+    if dw_opts.subtitles:
+        session.set_option("mux-subtitles", True)
+        log.info(f"Mux Subtitles (Experimental): Enabled")
+
+    """
+    FFmpeg Options that apply to all streams should they require muxing
+    """
+
+    # Check for -ffmpeg cli option
+    if dw_opts.ffmpeg:
+        session.set_option("ffmpeg-ffmpeg", dw_opts.ffmpeg)
+        log.info(f"FFmpeg Location: '{dw_opts.ffmpeg}'")
+    else:
+        # Check if an ffmpeg binary exists in the script path and use that if it's there
+        ffmpeg_check = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ffmpeg")
+        if os.path.isfile(ffmpeg_check):
+            dw_opts.ffmpeg = ffmpeg_check
+            log.info(f"FFmpeg Found: '{dw_opts.ffmpeg}'")
+            session.set_option("ffmpeg-ffmpeg", dw_opts.ffmpeg)
+
+    # Convert current python loglevel in an equivalent ffmpeg loglevel
+    dw_opts.ffmpeg_loglevel = get_ffmpeg_loglevel(dw_opts.loglevel)
+    session.set_option("ffmpeg-loglevel", dw_opts.ffmpeg_loglevel) # Set ffmpeg loglevel
     session.set_option("ffmpeg-verbose", True) # Pass ffmpeg stderr through to streamlink
     session.set_option("ffmpeg-fout", "mpegts") # Encode as mpegts when ffmpeg muxing (not matroska like default)
-    session.set_option("stream-segment-threads", 4) # Number of threads for fetching segments
 
-    streams = None
-    # If a clearkey is detected, prepare the stream for DRM decryption
-    if clearkey:
-        log.info(f"Clearkey(s): '{clearkey}'")
-        # Set session options for DASHDRM streams to fix stuttering
-        session.set_option("ffmpeg-copyts", True)
-        session.set_option("ffmpeg-start-at-zero", True)
-        # Prepend dashdrm:// to input_url for dashdrm plugin matching
-        input_url = f"dashdrm://{input_url}"
-        # Load dashdrm plugin
-        plugin = MPEGDASHDRM(session, input_url)
-        # Set the dashdrm plugin options
-        plugin.options["decryption-key"] = [clearkey] # pass clearkey tuple to plugin
-        plugin.options["presentation-delay"] = 30 # Begin dash-drm streams n seconds behind live
-        if args.subtitles:
-            plugin.options["use-subtitles"] = True
-        # Fetch the available streams
-        try:
-            streams = plugin.streams()
-        except PluginError as e:
-            log.error(f"Failed to load DRM plugin: {e}")
-            return
+    """
+    Stream detection and plugin loading
+    """
 
-    # For all other non-DRM/clearkey encrypted streams
-    else:
-        # Fetch the available streams
-        try:
-            streams = detect_stream_type(session, input_url, headers, proxy=args.proxy, cookies=cookies_requests) # Pass stream detection off to the detect_stream_type function
-        except Exception as e:
-            log.error(f"Stream setup failed: {e}")
-            return
+    try:
+        # Pass stream detection off to the detect_streams function. Returns a dict of available streams in varying quality.
+        streams = detect_streams(session, url, dw_opts.clearkey, dw_opts.subtitles)
+    except Exception as e:
+        log.error(f"Stream setup failed: {e}")
+        return
 
     # No streams found, log and error and exit
     if not streams:
         log.error("No playable streams found.")
         return
 
-    # Select best steam, live or iterate until one is found
-    if streamselection:
-        log.info(f"Stream Selection: Manually specifying {streamselection}")
-        stream = streams.get(streamselection)
+    """
+    Select the best stream(s) from the list of streams
+    """
+
+    # Logic for either manual or automatic stream selection
+    if dw_opts.stream:
+        # 'stream' fragment found. Select stream based on that selection.
+        log.info(f"Stream Selection: Manually specifying {dw_opts.stream}")
+        stream = streams.get(dw_opts.stream)
     else:
         log.info("Stream Selection: Automatic")
         stream = streams.get("best") or streams.get("live") or next(iter(streams.values()), None)
 
     # Stream not available, log error and exit
     if not stream:
-        log.error("No streams available.")
+        log.error("Stream selection not available.")
         return
 
-    # Do a variant check only if novideo and noaudio are False, or novariantcheck is True
-    if novideo is False and noaudio is False and novariantcheck is False:
+    """
+    Check the chosen stream for nuances such as video-only or audio-only feeds
+    """
+
+    # Do a variant check only if novideo and noaudio and novariantcheck are False
+    if dw_opts.novideo is False and dw_opts.noaudio is False and dw_opts.novariantcheck is False:
         # Attempt to detect stream variant automatically (Eg. Video Only or Audio Only)
-        log.debug("Attempting to check stream variant")
+        log.debug("Checking stream variation...")
         variant = check_stream_variant(stream,session)
         if variant == 1:
             log.info("Stream detected as audio only/no video")
-            novideo = True
+            dw_opts.novideo = True
         if variant == 2:
             log.info("Stream detected as video only/no audio")
-            noaudio = True
+            dw_opts.noaudio = True
     else:
         log.info("Skipping stream variant check")
 
-    if noaudio and not novideo:
+    if dw_opts.noaudio and not dw_opts.novideo:
         log.info("No Audio: Muxing silent audio into supplied video stream")
         audio_stream = create_silent_audio(session)
         video_stream = stream
         stream = MuxedStream(session, video_stream, audio_stream)
 
-    elif not noaudio and novideo:
+    elif not dw_opts.noaudio and dw_opts.novideo:
         log.info("No Video: Muxing blank video into supplied audio stream")
         # Set session options for audio only streams
         session.set_option("ffmpeg-copyts", False)
@@ -1168,7 +1125,7 @@ def main():
         video_stream = create_blank_video(session)
         stream = MuxedStream(session, video_stream, audio_stream)
 
-    elif noaudio and novideo:
+    elif dw_opts.noaudio and dw_opts.novideo:
         log.warning("Both 'noaudio' and 'novideo' specified. Ignoring both.")
 
     try:
