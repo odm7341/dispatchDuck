@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-Dispatchwrapparr - Version 1.3.5: A super wrapper for Dispatcharr
+Dispatchwrapparr - Version 1.3.4: A super wrapper for Dispatcharr
 
 Usage: dispatchwrapper.py -i <URL> -ua <User Agent String>
 Optional: -proxy <proxy server> -proxybypass <proxy bypass list> -clearkeys <json file/url> -cookies <txt file> -loglevel <level> -stream <selection> -subtitles -novariantcheck -novideo -noaudio
@@ -1013,9 +1013,9 @@ def main():
 
     # Set generic session options for Streamlink
     session.set_option("stream-segment-threads", 2)
-    session.set_option("http-timeout", 10)
-    session.set_option("stream-segment-timeout", 10)
-    session.set_option("stream-timeout", 30)
+    #session.set_option("http-timeout", 20)
+    #session.set_option("stream-segment-timeout", 10)
+    #session.set_option("stream-timeout", 60)
 
     # If cli -proxy argument supplied
     if dw_opts.proxy:
