@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-Dispatchwrapparr - Version 1.4.0: A super wrapper for Dispatcharr
+Dispatchwrapparr - Version 1.4.1: A super wrapper for Dispatcharr
 
 Usage: dispatchwrapper.py -i <URL> -ua <User Agent String>
 Optional: -proxy <proxy server> -proxybypass <proxy bypass list> -clearkeys <json file/url> -cookies <txt file> -loglevel <level> -stream <selection> -subtitles -novariantcheck -novideo -noaudio
@@ -59,10 +59,10 @@ def parse_args():
     if args.proxybypass and not args.proxy:
         parser.error("Argument -proxybypass: requires -proxy to be set")
 
-    # Ensure that novariantcheck, novideo, and noaudio are not specified simultaneously
-    flags = [args.novideo, args.noaudio, args.novariantcheck]
+    # Ensure that novariantcheck, novideo, noaudio, and clearkeys are not specified simultaneously
+    flags = [args.novideo, args.noaudio, args.novariantcheck, args.clearkeys]
     if sum(bool(f) for f in flags) > 1:
-        parser.error("Arguments -novariantcheck, -novideo and -noaudio can only be used individually")
+        parser.error("Arguments -novariantcheck, -novideo, -noaudio and -clearkeys can only be used individually")
 
     return args
 
@@ -344,6 +344,77 @@ class DASHDRMStream(DASHStream):
             audio.open()
             return audio
 
+class PlayRadio:
+    """
+    A class that mimicks Streamlink stream.open() by using a file-like
+    object that wraps a radio stream through FFmpeg, muxing blank video in for use on TV's.
+    """
+    def __init__(self, url, ffmpeg_loglevel, headers, cookies, resolution="320x180", fps=25, codec="libx264"):
+        self.url = url
+        self.ffmpeg_loglevel = ffmpeg_loglevel
+        self.headers = headers or {}
+        self.cookies = cookies or {}
+        self.resolution = resolution
+        self.fps = fps
+        self.codec = codec
+        self.process = None
+
+    def open(self):
+        """
+        Launch FFmpeg and return a file-like object (self) for reading stdout.
+        """
+        cmd = [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel", self.ffmpeg_loglevel,
+        ]
+
+        # Add headers
+        for k, v in self.headers.items():
+            cmd.extend(["-headers", f"{k}: {v}"])
+
+        # Add cookies
+        if self.cookies:
+            cookie_str = "; ".join(f"{k}={v}" for k, v in self.cookies.items())
+            cmd.extend(["-cookies", cookie_str])
+
+        cmd.extend([
+            "-re",
+            "-readrate_initial_burst", "6",
+            "-i", self.url,
+            "-f", "lavfi",
+            "-i", f"color=size={self.resolution}:rate={self.fps}:color=black",
+            "-c:v", self.codec,
+            "-c:a", "copy",
+            "-f", "mpegts",
+            "pipe:1",
+        ])
+
+        self.process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=sys.stderr,
+            stdin=subprocess.DEVNULL,
+        )
+        return self
+
+    def read(self, n=-1):
+        if self.process is None or self.process.stdout is None:
+            raise ValueError("FFmpeg process not started. Call .open() first.")
+        return self.process.stdout.read(n)
+
+    def close(self):
+        if self.process:
+            self.process.terminate()
+            self.process.wait()
+            self.process = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
 def load_cookies(cookiejar_path: str):
     """
     Load all cookies from a Netscape/Mozilla cookies.txt file
@@ -579,34 +650,24 @@ def check_stream_variant(stream, session=None):
     # HTTPStream case
     if isinstance(stream, HTTPStream):
         log.debug("Variant Check: HTTPStream Selected")
-        # Fast path: detect audio-only by extension
-        url = stream.url.lower()
-        if url.endswith((".aac", ".m4a", ".mp3", ".ogg")):
-            log.debug(f"Detected Audio Only Stream by Extension: {url.endswith}")
-            return 1
-        if url.endswith((".mp4", ".mkv", ".webm", ".mov")):
-            log.debug(f"Detected Video+Audio Stream by Extension: {url.endswith}")
-            return 0
-        # Safe path: check Content-Type via GET (stream=True) if session provided
         if session:
+            r = None
             try:
-                with closing(session.http.get(stream.url, stream=True, timeout=5)) as r:
-                    ctype = r.headers.get("Content-Type", "").lower()
-                    if ctype.startswith("audio/"):
-                        log.debug(f"Detected Audio Only Stream by Content-Type: {ctype}")
-                        return 1
-                    if ctype.startswith("video/"):
-                        log.debug(f"Detected Video+Audio Stream by Content-Type: {ctype}")
-                        return 0
+                r = session.http.get(stream.url, stream=True, timeout=5)
+                ctype = r.headers.get("Content-Type", "").lower()
+                if ctype.startswith("audio/"):
+                    log.debug(f"Detected Audio Only Stream by Content-Type: {ctype}")
+                    return 1
+                if ctype.startswith("video/"):
+                    log.debug(f"Detected Video+Audio Stream by Content-Type: {ctype}")
+                    return 0
             except Exception:
                 # Ignore errors (405, timeout, etc.)
                 return 0
-        return 0
-
     # Default/fallback
     return 0
 
-def create_silent_audio(session) -> Stream:
+def create_silent_audio(session, ffmpeg_loglevel) -> Stream:
     """
     Return a Streamlink-compatible Stream that produces continuous silent AAC audio.
     Uses ffmpeg with anullsrc.
@@ -619,7 +680,7 @@ def create_silent_audio(session) -> Stream:
         "-f", "adts",
         "pipe:1"
     ]
-    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.sys.stderr)
 
     class SilentAudioStream(Stream):
         def open(self, *args, **kwargs):
@@ -630,37 +691,6 @@ def create_silent_audio(session) -> Stream:
                 process.kill()
 
     return SilentAudioStream(session)
-
-def create_blank_video(session, resolution="320x180", fps=25, codec="libx264") -> Stream:
-    """
-    Create a Streamlink-compatible Stream that produces a blank video.
-    Useful for muxing with audio-only streams.
-
-    Args:
-        session: Streamlink session instance
-        resolution: Video resolution (default 320x180)
-        fps: Frames per second (default 25)
-        codec: Video codec (default libx264)
-    """
-    cmd = [
-        "ffmpeg",
-        "-f", "lavfi",
-        "-i", f"color=size={resolution}:rate={fps}:color=black",
-        "-c:v", codec,
-        "-f", "mpegts",
-        "pipe:1"
-    ]
-    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-
-    class BlankVideoStream(Stream):
-        def open(self, *args, **kwargs):
-            return process.stdout
-
-        def close(self):
-            if process.poll() is None:
-                process.kill()
-
-    return BlankVideoStream(session)
 
 def process_keys(clearkeys):
     """
@@ -810,7 +840,6 @@ def main():
     try:
         # Pass stream detection off to the detect_streams function. Returns a dict of available streams in varying quality.
         streams = detect_streams(session, url, dw_opts.clearkey, dw_opts.subtitles)
-        log.info(streams)
     except Exception as e:
         log.error(f"Stream setup failed: {e}")
         return
@@ -842,8 +871,8 @@ def main():
     Check the chosen stream for nuances such as video-only or audio-only feeds
     """
 
-    # Do a variant check only if novideo and noaudio and novariantcheck are False
-    if dw_opts.novideo is False and dw_opts.noaudio is False and dw_opts.novariantcheck is False:
+    # Do a variant check only if novideo, noaudio and novariantcheck are False and there dw_opts.clearkey is None
+    if dw_opts.novideo is False and dw_opts.noaudio is False and dw_opts.novariantcheck is False and dw_opts.clearkey is None:
         # Attempt to detect stream variant automatically (Eg. Video Only or Audio Only)
         log.debug("Checking stream variation...")
         variant = check_stream_variant(stream,session)
@@ -856,29 +885,23 @@ def main():
     else:
         log.info("Skipping stream variant check")
 
-    if dw_opts.noaudio and not dw_opts.novideo:
+    if dw_opts.noaudio and not dw_opts.novideo and not dw_opts.clearkey:
         log.info("No Audio: Muxing silent audio into supplied video stream")
-        audio_stream = create_silent_audio(session)
+        audio_stream = create_silent_audio(session,dw_opts.ffmpeg_loglevel)
         video_stream = stream
         stream = MuxedStream(session, video_stream, audio_stream)
 
-    elif not dw_opts.noaudio and dw_opts.novideo:
+    elif not dw_opts.noaudio and dw_opts.novideo and not dw_opts.clearkey:
         log.info("No Video: Muxing blank video into supplied audio stream")
-        # Set session options for audio only streams
-        session.set_option("ffmpeg-copyts", False)
-        session.set_option("ffmpeg-start-at-zero", False)
-        audio_stream = stream
-        video_stream = create_blank_video(session)
-        stream = MuxedStream(session, video_stream, audio_stream)
+        stream = PlayRadio(url, dw_opts.ffmpeg_loglevel, headers=None, cookies=None)
 
     elif dw_opts.noaudio and dw_opts.novideo:
         log.warning("Both 'noaudio' and 'novideo' specified. Ignoring both.")
 
     if dw_opts.clearkey:
-        session.set_option("ffmpeg-copyts", False)
-        session.set_option("ffmpeg-start-at-zero", False)
-        # Stream is DRM, process the keys to ensure in proper format
+        # Process clearkeys into format that ffmpeg understands
         processed_keys = process_keys(dw_opts.clearkey)
+        # Set processed keys as session option
         session.options.set("clearkeys", processed_keys)
         log.info(f"DASHDRM Clearkey(s): '{dw_opts.clearkey}' -> {processed_keys}")
 
