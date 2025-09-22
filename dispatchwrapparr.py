@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-Dispatchwrapparr - Version 1.4.1: A super wrapper for Dispatcharr
+Dispatchwrapparr - Version 1.4.2: A super wrapper for Dispatcharr
 
 Usage: dispatchwrapper.py -i <URL> -ua <User Agent String>
 Optional: -proxy <proxy server> -proxybypass <proxy bypass list> -clearkeys <json file/url> -cookies <txt file> -loglevel <level> -stream <selection> -subtitles -novariantcheck -novideo -noaudio
@@ -379,8 +379,6 @@ class PlayRadio:
             cmd.extend(["-cookies", cookie_str])
 
         cmd.extend([
-            "-re",
-            "-readrate_initial_burst", "6",
             "-i", self.url,
             "-f", "lavfi",
             "-i", f"color=size={self.resolution}:rate={self.fps}:color=black",
@@ -396,6 +394,8 @@ class PlayRadio:
             stderr=sys.stderr,
             stdin=subprocess.DEVNULL,
         )
+
+        log.debug(f"Running ffmpeg cmd: {cmd}")
         return self
 
     def read(self, n=-1):
