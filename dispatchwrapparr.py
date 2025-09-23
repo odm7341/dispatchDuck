@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-Dispatchwrapparr - Version 1.4.2: A super wrapper for Dispatcharr
+Dispatchwrapparr - A super wrapper for Dispatcharr
 
 Usage: dispatchwrapper.py -i <URL> -ua <User Agent String>
 Optional: -proxy <proxy server> -proxybypass <proxy bypass list> -clearkeys <json file/url> -cookies <txt file> -loglevel <level> -stream <selection> -subtitles -novariantcheck -novideo -noaudio
@@ -36,12 +36,13 @@ from streamlink.utils.l10n import Language
 from streamlink.utils.times import now
 
 log = logging.getLogger("dispatchwrapparr")
+ver = "1.4.4"
 
 def parse_args():
     # Initial wrapper arguments
     parser = argparse.ArgumentParser(description="Dispatchwrapparr: A super wrapper for Dispatcharr")
-    parser.add_argument("-i", required=True, help="Input URL")
-    parser.add_argument("-ua", required=True, help="User-Agent string")
+    parser.add_argument("-i", required=True, help="Required: Stream URL")
+    parser.add_argument("-ua", required=True, help="Required: User-Agent string")
     parser.add_argument("-proxy", help="Optional: HTTP proxy server (e.g. http://127.0.0.1:8888)")
     parser.add_argument("-proxybypass", help="Optional: Comma-separated list of hostnames or IP patterns to bypass the proxy (e.g. '192.168.*.*,*.lan')")
     parser.add_argument("-clearkeys", help="Optional: Supply a json file or URL containing URL/Clearkey maps (e.g. 'clearkeys.json' or 'https://some.host/clearkeys.json')")
@@ -53,6 +54,7 @@ def parse_args():
     parser.add_argument("-novideo", action="store_true", help="Optional: Forces muxing of a blank video track into a stream that contains no audio")
     parser.add_argument("-noaudio", action="store_true", help="Optional: Forces muxing of a silent audio track into a stream that contains no video")
     parser.add_argument("-loglevel", type=str, default="INFO", choices=["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET"], help="Enable logging and set log level. (default: INFO)")
+    parser.add_argument("-v", "--version", action="version", version=f"Dispatchwrapparr {ver}")
     args = parser.parse_args()
 
     # Enforce dependency for proxybypass, must be used with proxy
@@ -131,7 +133,6 @@ class FFMPEGDRMMuxer(FFMPEGMuxer):
                 self._cmd.extend(["-decryption_key", keys[key]])
                 self._cmd.extend(["-re"])
                 self._cmd.extend(["-readrate_initial_burst", "6"])
-                self._cmd.extend(["-fflags", "+discardcorrupt+genpts"])
                 self._cmd.extend(["-copyts"])
                 self._cmd.extend(["-start_at_zero"])
                 key += 1
@@ -739,6 +740,7 @@ def main():
         setattr(dw_opts, attr, None)
     # Configure log level
     log = configure_logging(dw_opts.loglevel)
+    log.info(f"Dispatchwrapparr Version: {ver}")
     log.info(f"Log Level: '{dw_opts.loglevel}'")
     # Process the input url and split off any fragments. Returns nonetype if no fragments
     url, fragments = split_fragments(dw_opts.i)
