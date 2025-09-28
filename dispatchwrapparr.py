@@ -36,7 +36,7 @@ from streamlink.utils.l10n import Language
 from streamlink.utils.times import now
 
 log = logging.getLogger("dispatchwrapparr")
-ver = "1.4.4"
+__version__ = "1.4.5"
 
 def parse_args():
     # Initial wrapper arguments
@@ -54,7 +54,7 @@ def parse_args():
     parser.add_argument("-novideo", action="store_true", help="Optional: Forces muxing of a blank video track into a stream that contains no audio")
     parser.add_argument("-noaudio", action="store_true", help="Optional: Forces muxing of a silent audio track into a stream that contains no video")
     parser.add_argument("-loglevel", type=str, default="INFO", choices=["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET"], help="Enable logging and set log level. (default: INFO)")
-    parser.add_argument("-v", "--version", action="version", version=f"Dispatchwrapparr {ver}")
+    parser.add_argument("-v", "--version", action="version", version=f"Dispatchwrapparr {__version__}")
     args = parser.parse_args()
 
     # Enforce dependency for proxybypass, must be used with proxy
@@ -350,14 +350,15 @@ class PlayRadio:
     A class that mimicks Streamlink stream.open() by using a file-like
     object that wraps a radio stream through FFmpeg, muxing blank video in for use on TV's.
     """
-    def __init__(self, url, ffmpeg_loglevel, headers, cookies, resolution="320x180", fps=25, codec="libx264"):
+    def __init__(self, url, ffmpeg_loglevel, headers, cookies, resolution="320x180", fps=25, acodec="aac", vcodec="libx264"):
         self.url = url
         self.ffmpeg_loglevel = ffmpeg_loglevel
         self.headers = headers or {}
         self.cookies = cookies or {}
         self.resolution = resolution
         self.fps = fps
-        self.codec = codec
+        self.acodec = acodec
+        self.vcodec = vcodec
         self.process = None
 
     def open(self):
@@ -383,8 +384,8 @@ class PlayRadio:
             "-i", self.url,
             "-f", "lavfi",
             "-i", f"color=size={self.resolution}:rate={self.fps}:color=black",
-            "-c:v", self.codec,
-            "-c:a", "copy",
+            "-c:v", self.vcodec,
+            "-c:a", self.acodec,
             "-f", "mpegts",
             "pipe:1",
         ])
@@ -596,7 +597,7 @@ def detect_streams(session, url, clearkey, subtitles):
         elif "dash+xml" in content_type:
             return DASHStream.parse_manifest(session, url)
         # Standard HTTP Stream detected by content-type. Return with "live" as only one variant will exist.
-        elif "application/octet-stream" in content_type or content_type.startswith("audio/") or content_type.startswith("video/"):
+        elif "application/octet-stream" in content_type or content_type.startswith("audio/") or content_type.startswith("video/") or content_type.endswith("/ogg"):
             return {"live": HTTPStream(session, url)}
         else:
             # Exhaused all options.
@@ -656,7 +657,7 @@ def check_stream_variant(stream, session=None):
             try:
                 r = session.http.get(stream.url, stream=True, timeout=5)
                 ctype = r.headers.get("Content-Type", "").lower()
-                if ctype.startswith("audio/"):
+                if ctype.startswith("audio/") or ctype.endswith("/ogg"):
                     log.debug(f"Detected Audio Only Stream by Content-Type: {ctype}")
                     return 1
                 if ctype.startswith("video/"):
@@ -740,7 +741,7 @@ def main():
         setattr(dw_opts, attr, None)
     # Configure log level
     log = configure_logging(dw_opts.loglevel)
-    log.info(f"Dispatchwrapparr Version: {ver}")
+    log.info(f"Dispatchwrapparr Version: {__version__}")
     log.info(f"Log Level: '{dw_opts.loglevel}'")
     # Process the input url and split off any fragments. Returns nonetype if no fragments
     url, fragments = split_fragments(dw_opts.i)
