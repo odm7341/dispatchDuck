@@ -17,57 +17,29 @@
 
 ---
 
-## ⚙️ CLI Usage
+## 🚀 Installation
 
-- `-i`: Required input URL
-- `-ua`: Required user agent string
-- `-proxy <proxy server>`: Optional: Configure a proxy server. Supports http, https only.
-- `-proxybypass <comma-delimited hostnames>`: Optional. A comma delimited list of hostnames to bypass. Eg. '.local,192.168.0.44:90'. Do not use "*", this is unsupported. Wilcards match with '.'
-- `-clearkeys <clearkey file or url>`: Optional: Supply a json file or URL containing json URL to clearkey mappings.
-- `-cookies <cookie file>`: Optional: Supply a cookies txt file in Mozilla/Netscape format for us with streams.
-- `-stream <stream selection>`: Optional: Supply a streamlink stream selection, eg. "worst" "1080p_alt" etc. Alternatively, use the `#stream=<selection>` URL fragment.
-- `-ffmpeg <ffmpeg location>`: Optional: Specify the location of an ffmpeg binary for use in stream muxing instead of auto detecting ffmpeg binaries in PATH or in the same directory as dispatchwrapparr.
-- `-novariantcheck`: Optional: Skips checks for streams containing video or audio only. Will not force muxing of missing audio or video. Cannot be used with -novideo or -noaudio arguments.
-- `-novideo`: Optional: Designates the stream as containing no video. Forces muxing of blank video into the stream if it is not detected during variant checking automatically.
-- `-noaudio`: Optional: Designates the stream as containing no audio. Forces muxing of silent audio into the stream if it is not detected during variant checking automatically.
-- `-loglevel <loglevel>`: Optional: to change the default log level of "INFO". Supported options: "CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", and "NOTSET".
-- `-subtitles`: Optional to enable muxing of subtitles. Disabled by default. NOTE: Subtitle support in streamlink is limited at best. May not work as intended.
-
-Example: `dispatchwrapparr.py -i {streamUrl} -ua {userAgent} [-proxy 'http://your.proxy.server:3128' -proxybypass '192.168.0.55,.somesite.com' -clearkeys 'clearkeys.json' -loglevel 'INFO' -subtitles]`
+1. Download the latest [Dispatchwrapparr Plugin](https://github.com/jordandalley/dispatchwrapparr/releases/latest) zip file 
+2. In Dispatcharr, navigate to 'Settings' > 'Plugins'
+3. Click the 'Import Plugin' button and select the Dispatchwrapparr Plugin zip file you just downloaded
+3. Select 'Enable Now', and then 'Enable'
+4. Once the plugin is loaded, click 'Run' inside the 'Install Dispatchwrapparr' section
+<img width="489" height="278" alt="image" src="https://github.com/user-attachments/assets/0b00bdd6-7ad9-428c-b2b0-66e62279e747" />
+5. An alert box should come up to confirm installation
+<img width="350" height="87" alt="image" src="https://github.com/user-attachments/assets/082e4a58-6d1e-4945-bcae-168692a667be" />
+6. Click the refresh icon <img width="29" height="29" alt="image" src="https://github.com/user-attachments/assets/0945ad01-9af6-49bf-80e6-ff9607bdc501" /> to display all available settings
 
 ---
-
-## 🚀 Script Installation & Update
-
-1. This command will install or update Dispatchwrapparr to the latest version into your [Dispatcharr](https://github.com/Dispatcharr/Dispatcharr) docker container.
-
-```bash
-docker exec -it dispatcharr bash -c
-  "mkdir -p /data/dispatchwrapparr && \
-  curl -sSL \
-    'https://raw.githubusercontent.com/jordandalley/dispatchwrapparr/refs/heads/main/dispatchwrapparr.py' \
-    -o '/data/dispatchwrapparr/dispatchwrapparr.py' && \
-  chmod +x '/data/dispatchwrapparr/dispatchwrapparr.py'"
-```
 
 ## ➡️ Create a Dispatchwrapparr profile
 
-1. Create a new profile in Dispatcharr under 'Settings' > 'Stream Profiles'
-2. In the 'Name' field, type in 'dispatchwrapparr'
-3. In the 'Command' field, type in the location of the script as it would be inside the docker container, eg. `/data/dispatchwrapparr/dispatchwrapparr.py`
-4. In the 'Parameters' field, type in `-i {streamUrl} -ua {userAgent}`
+Dispatchwrapparr profiles can either be created manually under 'Settings' > 'Stream Profiles', or through the plugin interface.
+
+1. Create a new profile using the Dispatchwrapparr Plugin, navigate to under 'Settings' > 'Plugins'
+2. Enter a 'Profile Name' and fill in any other relevant details for the profile.
+3. Click 'Run' next to 'Create Stream Profile'
+4. Refresh your browser, then apply the profile to any particular streams that you want
 5. Now select 'dispatchwrapparr' as your preferred profile on any particular streams!
-
-<img width="324" height="254" alt="image" src="https://github.com/user-attachments/assets/cee7ee08-102a-4b3b-9206-46a842e0b473" />
-
-If you wish to use a proxy server, create a separate profile:
-
-6. In the 'Name' field, type in 'dispatchwrapparr proxy'
-7. In the 'Command' field, type in the location of the script as it would be inside the docker container, eg. `/data/dispatchwrapparr/dispatchwrapparr.py`
-8. In the 'Parameters' field, type in `-i {streamUrl} -ua {userAgent} -proxy http://your.proxy.server:3128`
-9. Now select 'dispatchwrapparr proxy' on any streams that you wish to use the proxy server for.
-
----
 
 ## ✨ How can I play DASHDRM streams?
 
@@ -83,7 +55,7 @@ I recommend the use of [jellyfin-ffmpeg](https://github.com/jellyfin/jellyfin-ff
 ***Method 1: Append a #clearkey=<clearkey> fragment to the stream URL***
 
 You'll need the clearkeys in order to play DRM protected content. There are a number of ways to acquire the keys such as scripts and browser plugins.
-This script assumes that you have these keys already.
+I'll assume that you have these keys already.
 
 To play these streams, simply create a custom m3u8 file that places the #clearkey=<clearkey> fragment at the end of the stream URL. Below is an example that could be used for Channel 4 (UK):
 
@@ -105,7 +77,7 @@ The `#clearkey=<clearkey>` can also be used in conjunction with other fragments.
 The reason why we remove the URL from the hash settings is because if the clearkey ever has to change (many channels rotate theirs regularly), then Dispatcharr won't treat the channel as new.
 
 
-***Method 2: Use `-clearkeys` argument to supply a json file or URL containing URL to Clearkey mappings***
+***Method 2: Use `-clearkeys` argument or supply a json file or URL containing URL to Clearkey mappings into the Dispatchwrapparr Plugin 'Clearkeys' field***
 
 The `-clearkeys` argument can be supplied with a json formatted file or URL containing URL's which map to clearkeys, and performs this function in the following ways:
 
@@ -194,12 +166,35 @@ The `-noaudio` argument can be supplied to dispatchwrapparr as a custom profile 
 
 Note: Using the novideo and noaudio arguments either as a fragment or a cli argument will disable the stream variant detection.
 
+---
+
+## ⚙️ Advanced CLI Usage
+
+- `-i`: Required input URL
+- `-ua`: Required user agent string
+- `-proxy <proxy server>`: Optional: Configure a proxy server. Supports http, https only.
+- `-proxybypass <comma-delimited hostnames>`: Optional. A comma delimited list of hostnames to bypass. Eg. '.local,192.168.0.44:90'. Do not use "*", this is unsupported. Wilcards match with '.'
+- `-clearkeys <clearkey file or url>`: Optional: Supply a json file or URL containing json URL to clearkey mappings.
+- `-cookies <cookie file>`: Optional: Supply a cookies txt file in Mozilla/Netscape format for us with streams.
+- `-stream <stream selection>`: Optional: Supply a streamlink stream selection, eg. "worst" "1080p_alt" etc. Alternatively, use the `#stream=<selection>` URL fragment.
+- `-ffmpeg <ffmpeg location>`: Optional: Specify the location of an ffmpeg binary for use in stream muxing instead of auto detecting ffmpeg binaries in PATH or in the same directory as dispatchwrapparr.
+- `-novariantcheck`: Optional: Skips checks for streams containing video or audio only. Will not force muxing of missing audio or video. Cannot be used with -novideo or -noaudio arguments.
+- `-novideo`: Optional: Designates the stream as containing no video. Forces muxing of blank video into the stream if it is not detected during variant checking automatically.
+- `-noaudio`: Optional: Designates the stream as containing no audio. Forces muxing of silent audio into the stream if it is not detected during variant checking automatically.
+- `-loglevel <loglevel>`: Optional: to change the default log level of "INFO". Supported options: "CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", and "NOTSET".
+- `-subtitles`: Optional to enable muxing of subtitles. Disabled by default. NOTE: Subtitle support in streamlink is limited at best. May not work as intended.
+
+Example: `dispatchwrapparr.py -i {streamUrl} -ua {userAgent} [-proxy 'http://your.proxy.server:3128' -proxybypass '192.168.0.55,.somesite.com' -clearkeys 'clearkeys.json' -loglevel 'INFO' -subtitles]`
+
+---
 
 ## ❤️ Shoutouts
 
 This script was made possible thanks to many wonderful python libraries and open source projects.
 
 - [Dispatcharr](https://github.com/Dispatcharr/Dispatcharr) development community for making such an awesome stream manager!
+- [SergeantPanda](https://github.com/SergeantPanda) for support and guidance on the Dispatcharr discord
+- [OkinawaBoss](https://github.com/OkinawaBoss) for creating the Dispatcharr plugin system and providing example code
 - [Streamlink](https://streamlink.github.io/) for their awesome API and stream handling capability
 - [titus-au](https://github.com/titus-au/streamlink-plugin-dashdrm) who laid a lot of the groundwork for managing DASHDRM streams in streamlink!
 - [matthuisman](https://github.com/matthuisman) this guy is a local streaming legend in New Zealand. His code and work with streams has taught me heaps!
