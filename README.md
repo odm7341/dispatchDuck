@@ -38,7 +38,7 @@
 Dispatchwrapparr profiles can either be created manually under 'Settings' > 'Stream Profiles', or through the plugin interface.
 To create profiles manually, Dispatchwrapparr is usually installed under `/data/dispatchwrapparr/dispatchwrapparr.py`.
 
-1. Create a new profile using the Dispatchwrapparr Plugin, navigate to under 'Settings' > 'Plugins'
+1. Create a new profile using the Dispatchwrapparr Plugin by navigating to 'Settings' > 'Plugins'
 2. Enter a 'Profile Name' and fill in any other relevant details for the profile.
 3. Click 'Run' next to 'Create Stream Profile'
 4. Refresh your browser, then apply the profile to any particular streams that you want
