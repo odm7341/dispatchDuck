@@ -110,24 +110,25 @@ Simply upload your m3u8 file into Dispatcharr, select a Dispatchwrapparr stream 
 
 ## ⚙️ CLI Arguments
 
-- `-i`: Required: Input URL
-- `-ua`: Required: User agent string
-- `-v`: Displays the Dispatchwrapparr version information then exits
-- `-proxy <proxy server>`: Optional: Configure a proxy server. Supports HTTP and HTTPS proxies only
-- `-proxybypass <comma-delimited hostnames>`: Optional. A comma delimited list of hostnames to bypass. Eg. '.local,192.168.0.44:90'. Do not use "*", this is unsupported. Whole domains match with '.'
-- `-clearkeys <clearkey file or url>`: Optional: Supply a json file or URL containing json URL to clearkey mappings
-- `-cookies <cookie file>`: Optional: Supply a cookies txt file in Mozilla/Netscape format for us with streams
-- `-stream <stream selection>`: Optional: Supply a streamlink stream selection, eg. "worst" "1080p_alt" etc
-- `-ffmpeg <ffmpeg location>`: Optional: Specify the location of an ffmpeg binary for use in stream muxing instead of auto detecting ffmpeg binaries in PATH or in the same directory as dispatchwrapparr
-- `-novariantcheck`: Optional: Skips checks for streams containing video or audio only. Will not force muxing of missing audio or video. Cannot be used with -novideo or -noaudio arguments
-- `-novideo`: Optional: Designates the stream as containing no video. Forces muxing of blank video into the stream if it is not detected during variant checking automatically
-- `-noaudio`: Optional: Designates the stream as containing no audio. Forces muxing of silent audio into the stream if it is not detected during variant checking automatically
-- `-loglevel <loglevel>`: Optional: to change the default log level of "INFO". Supported options: "CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", and "NOTSET"
-- `-subtitles`: Optional: Enable muxing of subtitles. Disabled by default. NOTE: Subtitle support in streamlink is limited at best - this may not work as intended
+| Argument        | Type     | Example Values                                            | Description                                                                                                                                                                                  |
+| :---            | :---     | :---                                                      | :---                                                                                                                                                                                         | 
+| -i              | Required | `{streamUrl}`                                             | Input stream URL from Dispatcharr.                                                                                                                                                           |
+| -ua             | Required | `{userAgent}`                                             | Input user-agent header from Dispatcharr.                                                                                                                                                    |
+| -clearkeys      | Optional | `/path/to/clearkeys.json` or `https://url.to/clearkeys`   | Supply a json file or URL containing URL -> Clearkey pairs.                                                                                                                                  |
+| -proxy          | Optional | `http://proxy.server:8080`                                | Configure a proxy server. Supports HTTP and HTTPS proxies only.                                                                                                                              |
+| -proxybypass    | Optional | `.domain.com,192.168.0.100:80`                            | A comma delimited list of hostnames to bypass. Eg. '.local,192.168.0.44:90'. Do not use "*", this is unsupported. Whole domains match with '.'                                               |
+| -cookies        | Optional | `cookies.txt` or `/path/to/cookies.txt`                   | Disabled Supply a cookies txt file in Mozilla/Netscape format for us with streams                                                                                                            |
+| -stream         | Optional | `1080p_alt` or `worst`                                    | Override Dispatchwrapparr automatic stream selection with a manual selection for the stream URL                                                                                              |
+| -ffmpeg         | Optional | `/path/to/ffmpeg`                                         | Specify the location of an ffmpeg binary for use in stream muxing instead of auto detecting ffmpeg binaries in PATH or in the same directory as dispatchwrapparr.py                          |
+| -novariantcheck | Optional |                                                           | Do not automatically detect audio-only or video-only streams and mux in blank video or silent audio for compatibility purposes. Just pass through the stream as-is (without video or audio). |
+| -noaudio        | Optional |                                                           | Disables variant checking (-novariantcheck) and manually specifies that the stream contains no audio. This instructs Dispatchwrapparr to mux in silent audio.                                |
+| -novideo        | Optional |                                                           | Disables variant checking (-novariantcheck) and manually specifies that the stream contains no video. This instructs Dispatchwrapparr to mux in blank video.                                 |
+| -loglevel       | Optional | `CRITICAL`, `ERROR`, `WARNING`, `INFO`, `DEBUG`, `NOTSET` | Sets the python and ffmpeg log levels. By default, the loglevel is set to 'INFO'                                                                                                             |
+| -subtitles      | Optional |                                                           | Enable muxing of subtitles. Disabled by default. NOTE: Subtitle support in streamlink is limited at best - this may not work as intended                                                     |
 
 Example: `dispatchwrapparr.py -i {streamUrl} -ua {userAgent} -proxy http://your.proxy.server:3128 -proxybypass 192.168.0.55,.somesite.com -clearkeys clearkeys.json -loglevel INFO`
 
-### Using the -clearkeys CLI argument for DRM decryption
+### 💡 Using the -clearkeys CLI argument for DRM decryption
 
 The -clearkeys CLI argument is perfect for building custom API's or supplying json files that contain or supply automatically rotated URL -> Clearkey pairs to Dispatchwrapparr for DRM decryption.
 
