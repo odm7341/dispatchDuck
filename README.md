@@ -25,8 +25,10 @@
 3. Select 'Enable Now', and then 'Enable'
 4. Once the plugin is loaded, click 'Run' inside the 'Install Dispatchwrapparr' section
 <img width="489" height="278" alt="image" src="https://github.com/user-attachments/assets/0b00bdd6-7ad9-428c-b2b0-66e62279e747" />
+
 5. An alert box should come up to confirm installation
 <img width="350" height="87" alt="image" src="https://github.com/user-attachments/assets/082e4a58-6d1e-4945-bcae-168692a667be" />
+
 6. Click the refresh icon <img width="29" height="29" alt="image" src="https://github.com/user-attachments/assets/0945ad01-9af6-49bf-80e6-ff9607bdc501" /> to display all available settings
 
 ---
