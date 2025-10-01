@@ -1,4 +1,5 @@
 import os
+import stat
 import re
 import subprocess
 import requests
@@ -30,12 +31,12 @@ class Plugin:
                 self.settings = {"local_version": self.check_local_version()}
             else:
                 self.settings = {}
-                
+
         if os.path.isfile(self.dw_path) is False or self.settings.get("local_version") is None:
             self.actions = [
                 {"id": "install", "label": "Install Dispatchwrapparr", "description": "Click 'Run' to install Dispatchwrapparr, then click the refresh icon in the top right corner."}
             ]
-            
+
         else:
             self.fields = [
                 {
@@ -180,6 +181,9 @@ class Plugin:
         resp.raise_for_status()
         with open(self.dw_path, "w", encoding="utf-8") as f:
             f.write(resp.text)
+        # set executable
+        st = os.stat(self.dw_path)
+        os.chmod(self.dw_path, st.st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
         self.persist_settings({"local_version": self.check_local_version()})
         return {"status": "ok", "message": f"Installed Dispatchwrapparr v{self.settings.get('local_version')} to {self.dw_path}"}
 
@@ -193,6 +197,9 @@ class Plugin:
             resp.raise_for_status()
             with open(self.dw_path, "w", encoding="utf-8") as f:
                 f.write(resp.text)
+            # set executable
+            st = os.stat(self.dw_path)
+            os.chmod(self.dw_path, st.st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
             self.persist_settings({"local_version": self.check_local_version()})
             return {"status": "ok", "message": f"Updated Dispatchwrapparr from v{local_version} to v{remote_version}"}
 
