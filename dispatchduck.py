@@ -7,7 +7,6 @@ Usage: dispatchduck.py -i <URL> -ua <User Agent String>
 Optional: -d, --debug
 """
 
-import os
 import sys
 import argparse
 import subprocess

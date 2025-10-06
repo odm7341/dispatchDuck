@@ -1,0 +1,29 @@
+name: Build Plugin Artifact
+
+on:
+  push:
+    branches: [ main ]
+    paths: [ 'dispatchduck_plugin/**' ]
+  release:
+    types: [ published ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Create plugin zip
+      run: |
+        cd dispatchduck_plugin
+        zip -r ../dispatchduck-plugin.zip .
+
+    - name: Upload plugin artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: dispatchduck-plugin
+        path: dispatchduck-plugin.zip
+        retention-days: 30
