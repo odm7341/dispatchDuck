@@ -11,13 +11,13 @@ from django.db import transaction
 from typing import Dict, Any
 
 class Plugin:
-    name = "Dispatchwrapparr Plugin"
+    name = "DispatchDuck Plugin"
     version = "1.0.0"
-    description = "An installer/updater and stream profile generator for Dispatchwrapparr"
+    description = "An installer/updater and stream profile generator for DispatchDuck"
 
-    dw_path = "/data/dispatchwrapparr/dispatchwrapparr.py"
-    dw_latest = "https://raw.githubusercontent.com/jordandalley/dispatchwrapparr/refs/heads/main/VERSION"
-    dw_url = "https://raw.githubusercontent.com/jordandalley/dispatchwrapparr/refs/heads/main/dispatchwrapparr.py"
+    dd_path = "/data/dispatchduck/dispatchduck.py"
+    dd_latest = "https://raw.githubusercontent.com/odm7341/dispatchDuck/refs/heads/main/VERSION"
+    dd_url = "https://raw.githubusercontent.com/odm7341/dispatchDuck/refs/heads/main/dispatchwrapparr.py"
     base_dir = Path(__file__).resolve().parent
     plugin_key = base_dir.name.replace(" ", "_").lower()
 
@@ -27,12 +27,12 @@ class Plugin:
             self.settings = self.context.settings
         except PluginConfig.DoesNotExist:
             self.context = None
-            if os.path.isfile(self.dw_path):
+            if os.path.isfile(self.dd_path):
                 self.settings = {"local_version": self.check_local_version()}
             else:
                 self.settings = {}
 
-        if os.path.isfile(self.dw_path) is False or self.settings.get("local_version") is None:
+        if os.path.isfile(self.dd_path) is False or self.settings.get("local_version") is None:
             self.actions = [
                 {"id": "install", "label": "Install Dispatchwrapparr", "description": "Click 'Run' to install Dispatchwrapparr, then click the refresh icon in the top right corner."}
             ]
@@ -90,10 +90,10 @@ class Plugin:
     
     # Versioning functions
     def check_local_version(self):
-        if os.path.isfile(self.dw_path):
+        if os.path.isfile(self.dd_path):
             try:
                 result = subprocess.run(
-                    ["python3", self.dw_path, "-v"],
+                    ["python3", self.dd_path, "-v"],
                     capture_output=True,
                     text=True,
                     check=True
@@ -109,24 +109,24 @@ class Plugin:
             return None
 
     def check_remote_version(self):
-        resp = requests.get(self.dw_latest)
+        resp = requests.get(self.dd_latest)
         resp.raise_for_status()
         version = resp.text.strip()
         return version
 
     # Handles installation and updates
     def install(self):
-        path = os.path.dirname(self.dw_path)
+        path = os.path.dirname(self.dd_path)
         os.makedirs(path, exist_ok=True)
-        resp = requests.get(self.dw_url)
+        resp = requests.get(self.dd_url)
         resp.raise_for_status()
-        with open(self.dw_path, "w", encoding="utf-8") as f:
+        with open(self.dd_path, "w", encoding="utf-8") as f:
             f.write(resp.text)
         # set executable
-        st = os.stat(self.dw_path)
-        os.chmod(self.dw_path, st.st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        st = os.stat(self.dd_path)
+        os.chmod(self.dd_path, st.st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
         self.persist_settings({"local_version": self.check_local_version()})
-        return {"status": "ok", "message": f"Installed Dispatchwrapparr v{self.settings.get('local_version')} to {self.dw_path}"}
+        return {"status": "ok", "message": f"Installed Dispatchwrapparr v{self.settings.get('local_version')} to {self.dd_path}"}
 
     def check_updates(self):
         local_version = self.check_local_version()
@@ -134,13 +134,13 @@ class Plugin:
         if local_version == remote_version:
             return {"status": "ok", "message": "Dispatchwrapparr is already up to date"}
         else:
-            resp = requests.get(self.dw_url)
+            resp = requests.get(self.dd_url)
             resp.raise_for_status()
-            with open(self.dw_path, "w", encoding="utf-8") as f:
+            with open(self.dd_path, "w", encoding="utf-8") as f:
                 f.write(resp.text)
             # set executable
-            st = os.stat(self.dw_path)
-            os.chmod(self.dw_path, st.st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+            st = os.stat(self.dd_path)
+            os.chmod(self.dd_path, st.st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
             self.persist_settings({"local_version": self.check_local_version()})
             return {"status": "ok", "message": f"Updated Dispatchwrapparr from v{local_version} to v{remote_version}"}
 
@@ -148,7 +148,7 @@ class Plugin:
     def create_profile(self):
         if (self.settings.get("profile_name") or None) is None:
             return {"status": "error", "message": "Please specify a profile name!"}
-        path = os.path.dirname(self.dw_path)
+        path = os.path.dirname(self.dd_path)
         profile_name = self.settings.get("profile_name").strip()
         if StreamProfile.objects.filter(name__iexact=profile_name).first():
             return {"status": "error", "message": f"Profile '{profile_name}' already exists!"}
@@ -163,7 +163,7 @@ class Plugin:
 
         profile = StreamProfile(
             name=profile_name,
-            command=self.dw_path,
+            command=self.dd_path,
             parameters=parameter_string,
             locked=False,
             is_active=True,
@@ -210,12 +210,36 @@ class Plugin:
     # Uninstalled dispatchwrapparr
     def uninstall(self):
         self.persist_settings({"local_version": None})
-        if os.path.exists(self.dw_path):
-            os.remove(self.dw_path)
+        if os.path.exists(self.dd_path):
+            os.remove(self.dd_path)
             return {"status": "ok", "message": "Uninstalled Dispatchwrapparr"}
         else:
-            return {"status": "error", "message": f"Path {self.dw_path} does not exist!"}
+            return {"status": "error", "message": f"Path {self.dd_path} does not exist!"}
 
+
+    # function to check if tsduck is installed
+    def tsduck_version(self):
+        try:
+            result = subprocess.run(
+                ["tsp", "--version"],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            output = result.stdout.strip()
+            # Parse version from "tsp: TSDuck - The MPEG Transport Stream Toolkit - version 3.42-4421"
+            if "version " in output:
+                version_part = output.split("version ")[1]
+                return version_part.strip()
+            else:
+                # Fallback: try to extract version number with regex pattern
+                import re
+                version_match = re.search(r'version\s+([0-9.-]+(?:-[0-9]+)?)', output)
+                if version_match:
+                    return version_match.group(1)
+                return None
+        except subprocess.CalledProcessError:
+            return None
     # Main run function
     def run(self, action: str, params: dict, context: dict):
         self.settings = context.get("settings", {})
