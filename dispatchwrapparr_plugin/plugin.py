@@ -46,52 +46,6 @@ class Plugin:
                     "default": "",
                     "help_text": "Mandatory: Enter a name for your stream profile",
                 },
-                {
-                    "id": "loglevel", "label": "Logging Level", "type": "select", "default": "INFO",
-                     "options": [
-                         {"value": "INFO", "label": "INFO"},
-                         {"value": "CRITICAL", "label": "CRITICAL"},
-                         {"value": "ERROR", "label": "ERROR"},
-                         {"value": "WARNING", "label": "WARNING"},
-                         {"value": "DEBUG", "label": "DEBUG"},
-                         {"value": "NOTSET", "label": "NOTSET"},
-                    ]
-                },
-                {
-                    "id": "proxy",
-                    "label": "Proxy Server",
-                    "type": "string",
-                    "default": "",
-                    "help_text": "Optional: Use an http proxy server for streams in this profile | Default: leave blank | Eg: 'http://proxy.address:8080'",
-                },
-                {
-                    "id": "proxybypass",
-                    "label": "Proxy Bypass",
-                    "type": "string",
-                    "default": "",
-                    "help_text": "Optional: If using an http proxy server, enter a comma-delimited list of hostnames to bypass | Default: leave blank | Eg: '.example.com,.example.local:8080,192.168.0.2'",
-                },
-                {
-                    "id": "clearkeys",
-                    "label": "Clearkeys JSON file/URL",
-                    "type": "string",
-                    "default": "",
-                    "help_text": "Optional: Specify a json file or URL that can be used to match DRM clearkeys to URL's (See Dispatchwrapparr documentation) | Default: leave blank | Eg: 'clearkeys.json' or 'https://path.to.clearkeys.api/clearkeys.json'",
-                },
-                {
-                    "id": "cookies",
-                    "label": "Cookies TXT file",
-                    "type": "string",
-                    "default": "",
-                    "help_text": "Optional: Specify a cookies.txt file in Mozilla format containing session information for streams | Default: leave blank | Eg: 'cookies.txt'",
-                },
-                {
-                    "id": "subtitles",
-                    "label": "Enable Subtitles when Muxing",
-                    "type": "boolean",
-                    "default": False,
-                    "help_text": "Optional: When muxing, include subtitles",
-                }
             ]
             confirm_install = {
                 "required": True,
@@ -133,20 +87,7 @@ class Plugin:
         except ValueError:
             return False
 
-    def is_valid_proxy_bypass(self, value: str) -> bool:
-        # Checks for compatible formats for env var NO_PROXY format
-        noproxy_regex = re.compile(
-            r'^(\.?[A-Za-z0-9.-]+(:\d+)?|\d{1,3}(\.\d{1,3}){3}(:\d+)?)$'
-        )
-        if not value:
-            return True  # empty is valid (no bypass)
-
-        parts = [v.strip() for v in value.split(",") if v.strip()]
-        for part in parts:
-            if not noproxy_regex.match(part):
-                return False
-        return True
-
+    
     # Versioning functions
     def check_local_version(self):
         if os.path.isfile(self.dw_path):
@@ -214,46 +155,8 @@ class Plugin:
 
         parameters = [
             "-ua", "{userAgent}",
-            "-i", "{streamUrl}",
-            "-loglevel", (self.settings.get("loglevel") or "INFO").strip()
+            "-i", "{streamUrl}"
         ]
-        # Validate and set proxy settings
-        proxy = (self.settings.get("proxy") or "").strip()
-        if proxy:
-            if self.is_valid_url(proxy) is False:
-                return {"status": "error", "message": f"Proxy Server: '{proxy}' is not a valid proxy server!"}
-            parameters += ["-proxy", proxy]
-
-        # Validate and set proxy bypass settings
-        proxybypass = (self.settings.get("proxybypass") or "").strip()
-        if proxybypass and not proxy:
-            return {"status": "error", "message": f"Proxy Bypass cannot be used without a proxy!"}
-        if proxy and proxybypass:
-            if self.is_valid_proxy_bypass(proxybypass) is False:
-                return {"status": "error", "message": f"Proxy Bypass: '{proxybypass}' is not valid for NO_PROXY format"}
-            parameters += ["-proxybypass", proxybypass]
-
-        # Validate and set clearkeys sources
-        clearkeys = (self.settings.get("clearkeys") or "").strip()
-        if clearkeys:
-            # Check if it's a valid URL or if a file exists
-            if self.is_valid_url(clearkeys) or os.path.isfile(clearkeys) or os.path.isfile(os.path.join(path,clearkeys)):
-                parameters += ["-clearkeys", clearkeys]
-            else:
-                return {"status": "error", "message": f"Clearkeys: The file/url '{clearkeys}' does not exist or is invalid"}
-
-        # Validate and set cookies file
-        cookies = (self.settings.get("cookies") or "").strip()
-        if cookies:
-            if os.path.isfile(cookies) or os.path.isfile(os.path.join(path,cookies)):
-                parameters += ["-cookies", cookies]
-            else:
-                return {"status": "error", "message": f"Cookies: The file '{cookies}' does not exist!"}
-
-        # Set subtitles value
-        subtitles = (self.settings.get("subtitles") or False)
-        if subtitles:
-            parameters += ["-subtitles"]
 
         # Convert all paramaters into a string
         parameter_string = " ".join(parameters)
@@ -290,12 +193,6 @@ class Plugin:
     def reset_plugin(self) -> Dict[str, Any]:
         keys = [
             "profile_name",
-            "loglevel",
-            "proxy",
-            "proxybypass",
-            "clearkeys",
-            "cookies",
-            "subtitles",
         ]
 
         default_values = {field["id"]: field.get("default") for field in self.fields}
