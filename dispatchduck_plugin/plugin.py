@@ -12,12 +12,12 @@ from typing import Dict, Any
 
 class Plugin:
     name = "DispatchDuck Plugin"
-    version = "1.0.0"
+    version = "1.0.1"
     description = "An installer/updater and stream profile generator for DispatchDuck"
 
     dd_path = "/data/dispatchduck/dispatchduck.py"
     dd_latest = "https://raw.githubusercontent.com/odm7341/dispatchDuck/refs/heads/main/VERSION"
-    dd_url = "https://raw.githubusercontent.com/odm7341/dispatchDuck/refs/heads/main/dispatchwrapparr.py"
+    dd_url = "https://raw.githubusercontent.com/odm7341/dispatchDuck/refs/heads/main/dispatchduck.py"
     base_dir = Path(__file__).resolve().parent
     plugin_key = base_dir.name.replace(" ", "_").lower()
 
@@ -34,7 +34,7 @@ class Plugin:
 
         if os.path.isfile(self.dd_path) is False or self.settings.get("local_version") is None:
             self.actions = [
-                {"id": "install", "label": "Install Dispatchwrapparr", "description": "Click 'Run' to install Dispatchwrapparr, then click the refresh icon in the top right corner."}
+                {"id": "install", "label": "Install DispatchDuck", "description": "Click 'Run' to install DispatchDuck, then click the refresh icon in the top right corner."}
             ]
 
         else:
@@ -49,7 +49,7 @@ class Plugin:
             ]
             confirm_install = {
                 "required": True,
-                "title": "Install Dispatchwrapparr?",
+                "title": "Install DispatchDuck?",
                 "message": "After installation is complete, click the refresh icon on the top right corner of this page",
             }
             confirm_update = {
@@ -69,14 +69,15 @@ class Plugin:
             }
             confirm_uninstall = {
                 "required": True,
-                "title": "Uninstall Dispatchwrapparr?",
-                "message": "After uninstallation, you can then delete this plugin. You will need to manually remove any Dispatchwrapparr stream profiles from 'Settings' -> 'Stream Profiles'",
+                "title": "Uninstall DispatchDuck?",
+                "message": "After uninstallation, you can then delete this plugin. You will need to manually remove any DispatchDuck stream profiles from 'Settings' -> 'Stream Profiles'",
             }
             self.actions = [
-                {"id": "create_profile", "label": "Create Stream Profile", "description": "Create a Dispatchwrapparr stream profile using the current settings", "confirm": confirm_profile},
+                {"id": "create_profile", "label": "Create Stream Profile", "description": "Create a DispatchDuck stream profile using the current settings", "confirm": confirm_profile},
                 {"id": "reset_plugin", "label": "Reset Profile Builder", "description": "Restore default settings for the profile builder", "confirm": confirm_reset},
                 {"id": "check_updates", "label": "Check for Updates", "description": f"Installed Version: v{self.settings.get('local_version')}", "confirm": confirm_update},
-                {"id": "uninstall", "label": "Uninstall Dispatchwrapparr", "description": "Uninstall Dispatchwrapparr and reset plugin to defaults", "confirm": confirm_uninstall}
+                {"id": "uninstall", "label": "Uninstall DispatchDuck", "description": "Uninstall DispatchDuck and reset plugin to defaults", "confirm": confirm_uninstall},
+                {"id": "tsduck_version", "label": "Check tsduck Version", "description": "Check the version of tsduck installed on your system"}
             ]
 
     # Validation functions
@@ -257,6 +258,9 @@ class Plugin:
 
         if action == "uninstall":
             return self.uninstall()
+
+        if action == "tsduck_version":
+            return self.tsduck_version()
 
         return {"status": "error", "message": f"Unknown action: {action}"}
 

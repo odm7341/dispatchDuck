@@ -16,10 +16,11 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Create plugin zip
+    - name: Create plugin zip with proper structure
       run: |
-        cd dispatchduck_plugin
-        zip -r ../dispatchduck-plugin.zip .
+        mkdir dispatchduck-plugin
+        cp -r dispatchduck_plugin/* dispatchduck-plugin/
+        zip -r dispatchduck-plugin.zip dispatchduck-plugin/
 
     - name: Upload plugin artifact
       uses: actions/upload-artifact@v4
